@@ -19,7 +19,7 @@ export const MessageBubble = ({ role, content }: MessageBubbleProps) => {
           gap: '8px',
           padding: '10px 14px',
           margin: '14px 0',
-          borderRadius: '10px',
+          borderRadius: '12px',
           background: 'var(--bg-elevated)',
           border: '1px solid var(--border-subtle)',
         }}

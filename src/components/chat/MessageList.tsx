@@ -29,7 +29,7 @@ export const MessageList = ({
   if (loading) {
     return (
       <div className="flex flex-1 items-center justify-center">
-        <div className="flex items-center" style={{ gap: '6px' }}>
+        <div className="flex items-center" style={{ gap: '4px' }}>
           {[0, 1, 2].map((i) => (
             <div
               key={i}
@@ -43,12 +43,6 @@ export const MessageList = ({
               }}
             />
           ))}
-          <style>{`
-            @keyframes bounce-dot {
-              0%, 80%, 100% { transform: translateY(0); opacity: 0.4; }
-              40% { transform: translateY(-4px); opacity: 1; }
-            }
-          `}</style>
         </div>
       </div>
     )
@@ -120,7 +114,7 @@ function ThinkingIndicator() {
         width: 'fit-content',
       }}
     >
-      <div className="flex items-center" style={{ gap: '3px' }}>
+      <div className="flex items-center" style={{ gap: '4px' }}>
         {[0, 1, 2].map((i) => (
           <span
             key={i}
@@ -145,12 +139,6 @@ function ThinkingIndicator() {
       >
         Thinking...
       </span>
-      <style>{`
-        @keyframes bounce-dot {
-          0%, 80%, 100% { transform: translateY(0); opacity: 0.4; }
-          40% { transform: translateY(-4px); opacity: 1; }
-        }
-      `}</style>
     </div>
   )
 }

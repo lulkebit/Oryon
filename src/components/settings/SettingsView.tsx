@@ -236,7 +236,7 @@ function Toggle({
           width: '14px',
           height: '14px',
           borderRadius: '50%',
-          background: checked ? '#fff' : 'var(--text-muted)',
+          background: checked ? 'var(--text-inverse)' : 'var(--text-muted)',
           transition: 'left 150ms',
         }}
       />

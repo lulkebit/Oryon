@@ -312,12 +312,12 @@ function ExploreTab({
     <div className="flex flex-1 flex-col overflow-hidden">
       <div style={{ padding: '16px 24px 0' }}>
         <div
-          className="flex items-center"
+          className="search-input-wrapper flex items-center"
           style={{
             height: '40px',
-            gap: '10px',
+            gap: '8px',
             padding: '0 14px',
-            borderRadius: '10px',
+            borderRadius: '12px',
             background: 'var(--bg-elevated)',
             border: '1px solid var(--border-subtle)',
             transition: 'border-color 150ms',
@@ -435,15 +435,15 @@ function CategorySection({
     <div style={{ marginBottom: '28px' }}>
       <div
         className="flex items-center justify-between"
-        style={{ padding: '0 24px', marginBottom: '10px' }}
+        style={{ padding: '0 24px', marginBottom: '12px' }}
       >
         <div>
           <h2
             style={{
-              fontSize: '15px',
+              fontSize: '16px',
               fontWeight: 600,
               color: 'var(--text-primary)',
-              letterSpacing: '-0.01em',
+              lineHeight: '24px',
             }}
           >
             {category.label}
@@ -522,6 +522,7 @@ function ScrollButton({
   return (
     <button
       onClick={onClick}
+      aria-label={`Scroll ${direction}`}
       className="flex items-center justify-center transition-colors"
       style={{
         width: '28px',
@@ -617,12 +618,12 @@ function BrowseModelCard({
             color: 'var(--text-muted)',
           }}
         >
-          <span className="flex items-center" style={{ gap: '3px' }}>
+          <span className="flex items-center" style={{ gap: '4px' }}>
             <ArrowDown2 size={11} color="currentColor" />
             {formatNumber(model.downloads)}
           </span>
           {(model.likes ?? 0) > 0 && (
-            <span className="flex items-center" style={{ gap: '3px' }}>
+            <span className="flex items-center" style={{ gap: '4px' }}>
               <Heart size={11} color="currentColor" />
               {formatNumber(model.likes)}
             </span>
@@ -656,7 +657,7 @@ function BrowseModelCard({
         ) : (
           <div
             className="flex flex-col"
-            style={{ gap: '3px', maxHeight: '140px', overflowY: 'auto' }}
+            style={{ gap: '4px', maxHeight: '140px', overflowY: 'auto' }}
           >
             {model.files.map((f) => (
               <FileRow
@@ -677,7 +678,7 @@ function BrowseModelCard({
 
       <div style={{ padding: '0 16px 14px', marginTop: 'auto' }}>
         {!expanded ? (
-          <div className="flex" style={{ gap: '6px' }}>
+          <div className="flex" style={{ gap: '8px' }}>
             <button
               onClick={() => setExpanded(true)}
               className="flex flex-1 items-center justify-center transition-colors"
@@ -711,7 +712,7 @@ function BrowseModelCard({
                   fontWeight: 500,
                   gap: '4px',
                   background: 'var(--accent)',
-                  color: '#fff',
+                  color: 'var(--text-inverse)',
                   opacity: activeDownload ? 0.5 : 1,
                 }}
               >
@@ -827,7 +828,7 @@ function FileRow({
         disabled={disabled}
         className="flex items-center transition-colors"
         style={{
-          gap: '3px',
+          gap: '4px',
           fontSize: '10px',
           fontWeight: 500,
           color: isDownloading ? 'var(--accent)' : 'var(--text-muted)',
@@ -949,19 +950,19 @@ function SearchModelCard({
             <div
               className="flex items-center"
               style={{
-                gap: '10px',
-                marginTop: '3px',
+                gap: '8px',
+                marginTop: '4px',
                 fontSize: '12px',
                 color: 'var(--text-muted)',
               }}
             >
               <span>{model.author}</span>
-              <span className="flex items-center" style={{ gap: '3px' }}>
+              <span className="flex items-center" style={{ gap: '4px' }}>
                 <ArrowDown2 size={11} color="currentColor" />
                 {formatNumber(model.downloads)}
               </span>
               {(model.likes ?? 0) > 0 && (
-                <span className="flex items-center" style={{ gap: '3px' }}>
+                <span className="flex items-center" style={{ gap: '4px' }}>
                   <Heart size={11} color="currentColor" />
                   {formatNumber(model.likes)}
                 </span>
@@ -978,14 +979,14 @@ function SearchModelCard({
               disabled={!!activeDownload}
               className="flex shrink-0 items-center transition-colors"
               style={{
-                height: '30px',
+                height: '32px',
                 gap: '5px',
                 padding: '0 12px',
                 borderRadius: '8px',
                 fontSize: '12px',
                 fontWeight: 500,
                 background: 'var(--accent)',
-                color: '#fff',
+                color: 'var(--text-inverse)',
                 opacity: activeDownload ? 0.5 : 1,
               }}
             >
@@ -1118,7 +1119,7 @@ function DownloadBanner({
       style={{
         margin: '12px 24px 0',
         padding: '12px 16px',
-        borderRadius: '10px',
+        borderRadius: '12px',
         background: 'var(--bg-elevated)',
         border: `1px solid ${download.isPaused ? 'var(--border-default)' : 'var(--accent)'}`,
       }}
@@ -1343,13 +1344,13 @@ function DownloadedTab({
                     className="flex items-center transition-colors"
                     style={{
                       gap: '6px',
-                      height: '30px',
+                      height: '32px',
                       padding: '0 14px',
                       borderRadius: '8px',
                       fontSize: '12px',
                       fontWeight: 500,
                       background: 'var(--accent)',
-                      color: '#fff',
+                      color: 'var(--text-inverse)',
                       opacity: loading ? 0.5 : 1,
                     }}
                   >
@@ -1360,7 +1361,7 @@ function DownloadedTab({
                   <span
                     style={{
                       padding: '0 14px',
-                      height: '30px',
+                      height: '32px',
                       display: 'flex',
                       alignItems: 'center',
                       borderRadius: '8px',
@@ -1378,7 +1379,7 @@ function DownloadedTab({
                   className="flex items-center justify-center transition-colors"
                   style={{
                     width: '30px',
-                    height: '30px',
+                    height: '32px',
                     borderRadius: '8px',
                     color: 'var(--text-muted)',
                   }}
@@ -1526,7 +1527,7 @@ function UsageTab() {
               marginBottom: '16px',
             }}
           >
-            <div className="flex items-center" style={{ gap: '10px', marginBottom: '8px' }}>
+            <div className="flex items-center" style={{ gap: '8px', marginBottom: '8px' }}>
               <MonitorMobbile size={18} color="var(--accent)" />
               <span
                 style={{
@@ -1609,7 +1610,7 @@ function UsageTab() {
             background: 'var(--bg-surface)',
           }}
         >
-          <div className="flex items-center" style={{ gap: '10px', marginBottom: '10px' }}>
+          <div className="flex items-center" style={{ gap: '8px', marginBottom: '12px' }}>
             <Cpu size={18} color="var(--accent)" />
             <span
               style={{

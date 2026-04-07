@@ -291,7 +291,7 @@ export const Sidebar = () => {
                     className="flex items-center transition-colors"
                     style={{
                       height: '32px',
-                      gap: '10px',
+                      gap: '8px',
                       padding: '0 12px',
                       borderRadius: '6px',
                       fontSize: '12px',
@@ -386,7 +386,7 @@ const SidebarButton = ({
     className="flex w-full items-center transition-colors"
     style={{
       height: '36px',
-      gap: '10px',
+      gap: '8px',
       padding: '0 12px',
       borderRadius: '6px',
       fontSize: '13px',

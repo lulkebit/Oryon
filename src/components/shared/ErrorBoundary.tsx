@@ -68,7 +68,7 @@ export class ErrorBoundary extends Component<Props, State> {
               fontSize: '12px',
               fontWeight: 500,
               background: 'var(--accent)',
-              color: '#fff',
+              color: 'var(--text-inverse)',
             }}
           >
             Try again

@@ -29,10 +29,12 @@ export const ChatInput = ({
 }: ChatInputProps) => {
   const [value, setValue] = useState('')
   const [attachments, setAttachments] = useState<AttachedFile[]>([])
+  const [attachError, setAttachError] = useState<string | null>(null)
   const textareaRef = useRef<HTMLTextAreaElement>(null)
 
   const handleAttach = useCallback(async () => {
     if (!isTauri) return
+    setAttachError(null)
     try {
       const { open } = await import('@tauri-apps/plugin-dialog')
       const selected = await open({ multiple: true })
@@ -58,8 +60,9 @@ export const ChatInput = ({
       if (newAttachments.length > 0) {
         setAttachments((prev) => [...prev, ...newAttachments])
       }
-    } catch (err) {
-      console.error('Failed to attach files:', err)
+    } catch {
+      setAttachError('Failed to read files')
+      setTimeout(() => setAttachError(null), 3000)
     }
   }, [])
 
@@ -108,18 +111,29 @@ export const ChatInput = ({
   return (
     <div style={{ padding: '8px 24px 20px' }}>
       <div style={{ maxWidth: '768px', margin: '0 auto' }}>
+      {attachError && (
+        <p
+          style={{
+            fontSize: '12px',
+            color: 'var(--status-error)',
+            marginBottom: '8px',
+          }}
+        >
+          {attachError}
+        </p>
+      )}
       {attachments.length > 0 && (
         <div
           className="flex flex-wrap"
-          style={{ gap: '6px', marginBottom: '8px' }}
+          style={{ gap: '8px', marginBottom: '8px' }}
         >
           {attachments.map((att, i) => (
             <div
               key={`${att.filename}-${i}`}
               className="flex items-center"
               style={{
-                gap: '6px',
-                padding: '4px 8px 4px 10px',
+                gap: '8px',
+                padding: '4px 8px 4px 12px',
                 borderRadius: '8px',
                 background: 'var(--bg-elevated)',
                 border: '1px solid var(--border-subtle)',

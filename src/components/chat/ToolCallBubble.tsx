@@ -128,7 +128,7 @@ export const ToolCallBubble = ({ toolCall }: ToolCallBubbleProps) => {
         )}
         <div
           className="flex items-center"
-          style={{ gap: '6px', marginLeft: 'auto', flexShrink: 0 }}
+          style={{ gap: '8px', marginLeft: 'auto', flexShrink: 0 }}
         >
           {statusIcon}
           {toolCall.durationMs != null && (

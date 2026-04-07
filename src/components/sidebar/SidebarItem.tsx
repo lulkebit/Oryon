@@ -30,7 +30,7 @@ export const SidebarItem = ({
     className="relative flex w-full items-center transition-colors"
     style={{
       height: '32px',
-      gap: '10px',
+      gap: '8px',
       padding: '0 12px',
       borderRadius: '6px',
       fontSize: '13px',
@@ -71,14 +71,6 @@ export const SidebarItem = ({
           animation: badge === 'running' ? 'pulse-badge 2s ease-in-out infinite' : undefined,
         }}
       />
-    )}
-    {badge === 'running' && (
-      <style>{`
-        @keyframes pulse-badge {
-          0%, 100% { opacity: 1; }
-          50% { opacity: 0.4; }
-        }
-      `}</style>
     )}
   </button>
 )
