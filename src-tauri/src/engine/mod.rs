@@ -316,6 +316,8 @@ fn strip_tool_call_markup(s: &str) -> String {
     let mut result = s.to_string();
     if let Some(start) = result.find("<tool_call>") {
         result.truncate(start);
+    } else if let Some(start) = result.find("{\"name\"") {
+        result.truncate(start);
     }
     result.trim().to_string()
 }
@@ -455,6 +457,13 @@ fn run_agentic_loop(
 }
 
 fn extract_tool_call(content: &str) -> Option<crate::tools::ToolCall> {
+    if let Some(tc) = extract_tool_call_tagged(content) {
+        return Some(tc);
+    }
+    extract_tool_call_bare_json(content)
+}
+
+fn extract_tool_call_tagged(content: &str) -> Option<crate::tools::ToolCall> {
     let tag = "<tool_call>";
     let start = content.find(tag)?;
     let json_start = start + tag.len();
@@ -467,14 +476,47 @@ fn extract_tool_call(content: &str) -> Option<crate::tools::ToolCall> {
 
     match serde_json::from_str::<crate::tools::ToolCall>(json_str) {
         Ok(tc) => {
-            log::info!("Extracted tool call: {} args={}", tc.name, tc.args);
+            log::info!("Extracted tagged tool call: {} args={}", tc.name, tc.args);
             Some(tc)
         }
         Err(e) => {
-            log::warn!("Failed to parse tool call JSON: {e}\nRaw: {json_str}");
+            log::warn!("Failed to parse tagged tool call: {e}\nRaw: {json_str}");
             None
         }
     }
+}
+
+fn extract_tool_call_bare_json(content: &str) -> Option<crate::tools::ToolCall> {
+    let search = content;
+    let mut start = 0;
+    while let Some(pos) = search[start..].find("{\"name\"") {
+        let abs = start + pos;
+        let slice = &search[abs..];
+        let mut depth = 0;
+        let mut end = 0;
+        for (i, ch) in slice.char_indices() {
+            match ch {
+                '{' => depth += 1,
+                '}' => {
+                    depth -= 1;
+                    if depth == 0 {
+                        end = i + 1;
+                        break;
+                    }
+                }
+                _ => {}
+            }
+        }
+        if end > 0 {
+            let json_str = &slice[..end];
+            if let Ok(tc) = serde_json::from_str::<crate::tools::ToolCall>(json_str) {
+                log::info!("Extracted bare JSON tool call: {} args={}", tc.name, tc.args);
+                return Some(tc);
+            }
+        }
+        start = abs + 1;
+    }
+    None
 }
 
 fn strip_control_tokens(s: &str) -> String {
@@ -506,36 +548,35 @@ const SYSTEM_PROMPT_BASE: &str =
 
 const TOOL_PROMPT_SECTION: &str = r#"
 
-You have access to the following tools:
+You have tools to interact with the project. Available tools:
+- glob: Find files. Args: {"pattern": "**/*.rs"}
+- grep: Search content. Args: {"pattern": "TODO", "glob": "*.ts"}
+- file_read: Read file. Args: {"path": "src/main.rs"}
+- file_write: Write file. Args: {"path": "file.txt", "content": "hello"}
+- file_patch: Edit file. Args: {"path": "file.txt", "old_string": "old", "new_string": "new"}
+- file_create: New file. Args: {"path": "file.txt", "content": "hello"}
+- file_delete: Delete. Args: {"path": "file.txt"}
+- shell_exec: Run command. Args: {"command": "ls -la"}
+- git_status: Git status. Args: {}
+- git_diff: Show diffs. Args: {}
+- git_commit: Commit. Args: {"message": "fix bug"}
+- git_log: History. Args: {"count": 5}
 
-- file_read: Read a file. Args: {"path": "relative/path", "offset": 1, "limit": 50}
-- file_write: Write/overwrite a file. Args: {"path": "relative/path", "content": "..."}
-- file_create: Create a new file. Args: {"path": "relative/path", "content": "..."}
-- file_patch: Search and replace in a file. Args: {"path": "relative/path", "old_string": "...", "new_string": "..."}
-- file_delete: Delete a file. Args: {"path": "relative/path"}
-- glob: Find files by pattern. Args: {"pattern": "**/*.rs"}
-- grep: Search file contents. Args: {"pattern": "regex", "glob": "*.ts"}
-- shell_exec: Run a shell command. Args: {"command": "ls -la"}
-- git_status: Show git status. Args: {}
-- git_diff: Show diffs. Args: {"staged": false}
-- git_commit: Commit changes. Args: {"message": "..."}
-- git_log: Show commit history. Args: {"count": 10}
-
-To use a tool, output:
+To call a tool, output exactly this format:
 <tool_call>
-{"name": "tool_name", "args": {"key": "value"}}
+{"name": "glob", "args": {"pattern": "*"}}
 </tool_call>
 
-Wait for the tool result before continuing. Tool results appear as:
-<tool_result>
-{result}
-</tool_result>
+Example conversation:
+User: What files are in this project?
+Assistant: Let me check.
+<tool_call>
+{"name": "glob", "args": {"pattern": "*"}}
+</tool_call>
 
-Guidelines:
-- Read files before editing to understand context
-- Use grep/glob to explore the codebase before making changes
-- Keep changes minimal and focused
-- Explain your reasoning to the user
+Then I receive the result and tell you what I found.
+
+Important: Always use the exact <tool_call> JSON format shown above.
 "#;
 
 fn build_system_prompt(workspace: Option<&str>) -> String {
@@ -687,7 +728,10 @@ fn run_inference(
             let prev_len = output.len();
             output.push_str(&fragment);
 
-            if !in_tool_call && output.contains("<tool_call") {
+            if !in_tool_call
+                && (output.contains("<tool_call")
+                    || output.contains("{\"name\""))
+            {
                 in_tool_call = true;
             }
 
