@@ -84,9 +84,9 @@
 ### Header Buttons
 
 - **New Agent**: Opens a new chat in the active workspace with an
-  agent selector. Icon: `Plus` (Lucide). Full-width button.
+  agent selector. Icon: `Add` (Iconsax). Full-width button.
 - **Model Hub**: Switches the main content area to the Model Hub view.
-  Icon: `Box` (Lucide). Full-width button. Active state when hub is open.
+  Icon: `Box1` (Iconsax). Full-width button. Active state when hub is open.
 - Both buttons: height 36px, `--text-sm`, weight 500, `--radius-md`
 - Spacing between buttons: `--space-1`
 - Section padding: `--space-3` horizontal, `--space-2` vertical
@@ -96,11 +96,11 @@
 - Act as expandable folder headers
 - Click to toggle expand/collapse
 - Right-click context menu: Rename, Remove, Open in Finder
-- Icon: `Folder` (Lucide), 16px
+- Icon: `Folder2` (Iconsax), 16px
 - Font: `--text-sm`, `--text-secondary`, weight 500
 - Height: 28px
 - Indent: `--space-3` from sidebar edge
-- Expand chevron: `ChevronDown`/`ChevronRight`, 14px, `--text-muted`
+- Expand chevron: `ArrowDown2`/`ArrowRight2` (Iconsax), 14px, `--text-muted`
 
 ### Chat Items
 
@@ -109,7 +109,7 @@
 - Active chat: `--bg-overlay` background, 2px left accent bar (`--accent`)
 - Hover: `--bg-overlay` at 50%
 - Right-click context menu: Rename, Duplicate, Delete
-- Icon: `MessageSquare` (Lucide), 14px, `--text-muted`
+- Icon: `Message` (Iconsax), 14px, `--text-muted`
 - Font: `--text-sm`, `--text-primary`
 - Height: 32px
 - Indent: `--space-6` from sidebar edge (nested under workspace)
@@ -140,7 +140,7 @@ When collapsed, the sidebar shows only icons:
 
 - Pinned to the bottom of the sidebar
 - Height: 40px
-- Icon: `Settings` (Lucide), 16px
+- Icon: `Setting2` (Iconsax), 16px
 - Label: "Settings", `--text-sm`, `--text-secondary`
 - Hover: `--bg-overlay`
 - Separator line above: 1px `--border-subtle`
@@ -249,7 +249,7 @@ slide in from the right:
 - Border: 1px `--border-subtle`
 - Border radius: `--radius-md`
 - Height: 36px (collapsed)
-- Left icon: tool-specific (File, Terminal, Search, Git, Globe)
+- Left icon: tool-specific (`Document`, `CommandSquare`, `SearchNormal1`, `Git`, `Global`) from Iconsax
 - Label: action summary (e.g., "Read file: src/main.rs")
 - Right: chevron to expand, status indicator
 - Click to expand inline, showing tool input/output
@@ -356,7 +356,7 @@ Replaces the chat view when activated via sidebar button.
 
 - Prominent, full-width, top of the hub
 - Height: 44px
-- Icon: `Search` (Lucide), left side
+- Icon: `SearchNormal1` (Iconsax), left side
 - Searches HF Hub in real-time (debounced 300ms)
 - Shows recent searches as suggestions
 

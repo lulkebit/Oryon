@@ -1,5 +1,5 @@
 import { useCallback, useRef } from 'react'
-import { Plus, Box, Settings, FolderOpen } from 'lucide-react'
+import { Add, Box1, Setting2, FolderOpen } from 'iconsax-react'
 import { useUiStore } from '@/stores/uiStore'
 import { useWorkspaceStore } from '@/stores/workspaceStore'
 import { SidebarItem } from './SidebarItem'
@@ -66,14 +66,14 @@ export const Sidebar = () => {
       {/* Header buttons */}
       <div className="flex flex-col gap-1 p-3">
         <SidebarButton
-          icon={<Plus size={16} />}
+          icon={<Add size={16} color="currentColor" />}
           label="New Agent"
           collapsed={sidebarCollapsed}
           onClick={() => {}}
           shortcut="⌘N"
         />
         <SidebarButton
-          icon={<Box size={16} />}
+          icon={<Box1 size={16} color="currentColor" />}
           label="Model Hub"
           collapsed={sidebarCollapsed}
           active={activeView === 'model-hub'}
@@ -102,7 +102,7 @@ export const Sidebar = () => {
                 background: 'var(--bg-elevated)',
               }}
             >
-              <FolderOpen size={14} />
+              <FolderOpen size={14} color="currentColor" />
               Open Workspace
             </button>
           </div>
@@ -142,7 +142,7 @@ export const Sidebar = () => {
         style={{ borderColor: 'var(--border-subtle)' }}
       >
         <SidebarButton
-          icon={<Settings size={16} />}
+          icon={<Setting2 size={16} color="currentColor" />}
           label="Settings"
           collapsed={sidebarCollapsed}
           active={activeView === 'settings'}

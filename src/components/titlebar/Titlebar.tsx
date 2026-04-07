@@ -1,6 +1,6 @@
 import { useCallback } from 'react'
 import { getCurrentWindow } from '@tauri-apps/api/window'
-import { Minus, Square, X } from 'lucide-react'
+import { Minus, Stop, CloseSquare } from 'iconsax-react'
 
 const appWindow = getCurrentWindow()
 
@@ -62,7 +62,7 @@ export const Titlebar = () => {
           style={{ color: 'var(--text-secondary)' }}
           aria-label="Minimize"
         >
-          <Minus size={14} />
+          <Minus size={14} color="currentColor" />
         </button>
         <button
           onClick={handleMaximize}
@@ -70,7 +70,7 @@ export const Titlebar = () => {
           style={{ color: 'var(--text-secondary)' }}
           aria-label="Maximize"
         >
-          <Square size={12} />
+          <Stop size={12} color="currentColor" />
         </button>
         <button
           onClick={handleClose}
@@ -78,7 +78,7 @@ export const Titlebar = () => {
           style={{ color: 'var(--text-secondary)' }}
           aria-label="Close"
         >
-          <X size={14} />
+          <CloseSquare size={14} color="currentColor" />
         </button>
       </div>
     </header>

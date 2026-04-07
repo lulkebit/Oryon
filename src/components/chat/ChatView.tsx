@@ -1,13 +1,13 @@
-import { Box } from 'lucide-react'
+import { MessageText1 } from 'iconsax-react'
 
 export const ChatView = () => {
   return (
     <div className="flex h-full flex-col items-center justify-center">
       <div className="flex flex-col items-center gap-4">
-        <Box
+        <MessageText1
           size={48}
-          strokeWidth={1}
-          style={{ color: 'var(--text-muted)' }}
+          color="var(--text-muted)"
+          variant="Broken"
         />
         <div className="text-center">
           <h2

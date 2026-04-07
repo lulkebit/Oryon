@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { ArrowLeft, Sun, Moon, Monitor } from 'lucide-react'
+import { ArrowLeft2, Sun1, Moon, Monitor } from 'iconsax-react'
 import { useUiStore } from '@/stores/uiStore'
 import type { Theme } from '@/lib/types'
 
@@ -36,7 +36,7 @@ export const SettingsView = () => {
           }}
           aria-label="Back"
         >
-          <ArrowLeft size={16} />
+          <ArrowLeft2 size={16} color="currentColor" />
         </button>
         <h1
           className="text-base font-semibold"
@@ -109,7 +109,7 @@ export const SettingsView = () => {
                   {([
                     { value: 'system', icon: Monitor, label: 'System' },
                     { value: 'dark', icon: Moon, label: 'Dark' },
-                    { value: 'light', icon: Sun, label: 'Light' },
+                    { value: 'light', icon: Sun1, label: 'Light' },
                   ] as const).map(({ value, icon: Icon, label }) => (
                     <button
                       key={value}
@@ -130,7 +130,7 @@ export const SettingsView = () => {
                             : 'transparent',
                       }}
                     >
-                      <Icon size={14} />
+                      <Icon size={14} color="currentColor" />
                       {label}
                     </button>
                   ))}

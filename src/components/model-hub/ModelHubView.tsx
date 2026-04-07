@@ -1,4 +1,4 @@
-import { Search, X } from 'lucide-react'
+import { SearchNormal1, CloseCircle } from 'iconsax-react'
 import { useUiStore } from '@/stores/uiStore'
 
 export const ModelHubView = () => {
@@ -29,7 +29,7 @@ export const ModelHubView = () => {
           }}
           aria-label="Close Model Hub"
         >
-          <X size={16} />
+          <CloseCircle size={16} color="currentColor" />
         </button>
       </div>
 
@@ -42,7 +42,7 @@ export const ModelHubView = () => {
             borderColor: 'var(--border-default)',
           }}
         >
-          <Search size={16} style={{ color: 'var(--text-muted)' }} />
+          <SearchNormal1 size={16} color="var(--text-muted)" />
           <input
             type="text"
             placeholder="Search models..."

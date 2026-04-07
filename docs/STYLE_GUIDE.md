@@ -165,10 +165,14 @@ Light theme uses `rgba(0,0,0,0.08)`, `rgba(0,0,0,0.12)`,
 
 ## Iconography
 
-- **Icon set**: Lucide Icons (consistent, MIT-licensed, tree-shakeable)
+- **Icon set**: Iconsax (`iconsax-react`) — 1000 icons in 6 styles
+- **Variant**: `Linear` as default throughout the app. Use `Bold` for
+  active/selected states, `Broken` for decorative/empty-state icons.
 - **Size**: 16px default, 20px for primary actions, 14px for inline
-- **Stroke**: 1.5px (matches Inter's visual weight)
-- **Color**: Inherits from `currentColor` — no hardcoded icon colors
+- **Color**: Pass `color="currentColor"` — inherits from parent text color.
+  For explicit colors, use CSS variable references (e.g., `color="var(--text-muted)"`)
+- **Consistency**: All icons in a given context (sidebar, toolbar, etc.)
+  must use the same variant and size
 
 ---
 

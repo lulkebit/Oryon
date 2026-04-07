@@ -1,4 +1,4 @@
-import { MessageSquare } from 'lucide-react'
+import { Message } from 'iconsax-react'
 
 interface SidebarItemProps {
   label: string
@@ -37,9 +37,9 @@ export const SidebarItem = ({
         style={{ background: 'var(--accent)' }}
       />
     )}
-    <MessageSquare
+    <Message
       size={14}
-      style={{ color: 'var(--text-muted)' }}
+      color="var(--text-muted)"
       className="shrink-0"
     />
     {!collapsed && (
