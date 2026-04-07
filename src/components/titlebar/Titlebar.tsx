@@ -1,60 +1,79 @@
 import { useCallback, useState, useEffect } from 'react'
-import { getCurrentWindow } from '@tauri-apps/api/window'
-
-const appWindow = getCurrentWindow()
+import { isTauri } from '@/lib/tauri'
 
 export const Titlebar = () => {
   const [isMaximized, setIsMaximized] = useState(false)
   const [hovered, setHovered] = useState(false)
 
   useEffect(() => {
-    appWindow.isMaximized().then(setIsMaximized)
-    const unlisten = appWindow.onResized(() => {
-      appWindow.isMaximized().then(setIsMaximized)
+    if (!isTauri) return
+    let cancelled = false
+
+    import('@tauri-apps/api/window').then(({ getCurrentWindow }) => {
+      if (cancelled) return
+      const win = getCurrentWindow()
+      win.isMaximized().then(setIsMaximized)
+      win.onResized(() => {
+        win.isMaximized().then(setIsMaximized)
+      })
     })
+
     return () => {
-      unlisten.then((fn) => fn())
+      cancelled = true
     }
   }, [])
 
-  const handleMinimize = useCallback(() => {
-    appWindow.minimize()
+  const handleMinimize = useCallback(async () => {
+    if (!isTauri) return
+    const { getCurrentWindow } = await import('@tauri-apps/api/window')
+    getCurrentWindow().minimize()
   }, [])
 
-  const handleMaximize = useCallback(() => {
-    if (isMaximized) {
-      appWindow.unmaximize()
+  const handleMaximize = useCallback(async () => {
+    if (!isTauri) return
+    const { getCurrentWindow } = await import('@tauri-apps/api/window')
+    const win = getCurrentWindow()
+    const maximized = await win.isMaximized()
+    if (maximized) {
+      win.unmaximize()
     } else {
-      appWindow.maximize()
+      win.maximize()
     }
-  }, [isMaximized])
+    setIsMaximized(!maximized)
+  }, [])
 
-  const handleClose = useCallback(() => {
-    appWindow.close()
+  const handleClose = useCallback(async () => {
+    if (!isTauri) return
+    const { getCurrentWindow } = await import('@tauri-apps/api/window')
+    getCurrentWindow().close()
   }, [])
 
   const handleDrag = useCallback(
-    (e: React.MouseEvent) => {
+    async (e: React.MouseEvent) => {
+      if (!isTauri) return
       if (e.detail === 2) {
         handleMaximize()
         return
       }
-      appWindow.startDragging()
+      const { getCurrentWindow } = await import('@tauri-apps/api/window')
+      getCurrentWindow().startDragging()
     },
     [handleMaximize]
   )
 
   return (
     <header
-      className="flex h-[44px] shrink-0 items-center border-b select-none"
+      className="flex shrink-0 items-center border-b select-none"
       style={{
+        height: '44px',
         background: 'var(--bg-surface)',
         borderColor: 'var(--border-subtle)',
       }}
     >
       {/* Traffic lights */}
       <div
-        className="flex items-center gap-[8px] px-[16px]"
+        className="flex items-center"
+        style={{ gap: '8px', padding: '0 16px' }}
         onMouseEnter={() => setHovered(true)}
         onMouseLeave={() => setHovered(false)}
       >
@@ -90,15 +109,18 @@ export const Titlebar = () => {
         onMouseDown={handleDrag}
       >
         <span
-          className="text-[12px] font-medium"
-          style={{ color: 'var(--text-secondary)' }}
+          style={{
+            fontSize: '12px',
+            fontWeight: 500,
+            color: 'var(--text-secondary)',
+          }}
         >
           Oryon
         </span>
       </div>
 
       {/* Balance spacer to keep title centered */}
-      <div className="w-[88px] shrink-0" />
+      <div style={{ width: '88px' }} className="shrink-0" />
     </header>
   )
 }
@@ -121,8 +143,12 @@ const TrafficLight = ({
   <button
     onClick={onClick}
     aria-label={ariaLabel}
-    className="flex h-[12px] w-[12px] items-center justify-center rounded-full transition-colors"
-    style={{ background: showIcon ? hoverColor : color }}
+    className="flex items-center justify-center rounded-full transition-colors"
+    style={{
+      width: '12px',
+      height: '12px',
+      background: showIcon ? hoverColor : color,
+    }}
     onMouseDown={(e) => e.stopPropagation()}
   >
     {showIcon && (
