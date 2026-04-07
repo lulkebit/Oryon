@@ -1,4 +1,4 @@
-import { User, Cpu } from 'iconsax-react'
+import { User, Cpu, InfoCircle } from 'iconsax-react'
 import type { MessageRole } from '@/lib/types'
 
 interface MessageBubbleProps {
@@ -13,6 +13,38 @@ export const MessageBubble = ({
   timestamp,
 }: MessageBubbleProps) => {
   const isUser = role === 'user'
+  const isSystem = role === 'system'
+
+  if (isSystem) {
+    return (
+      <div
+        className="flex items-start"
+        style={{
+          gap: '8px',
+          padding: '12px 16px',
+          margin: '8px 0',
+          borderRadius: '8px',
+          background: 'var(--bg-elevated)',
+          border: '1px solid var(--border-subtle)',
+        }}
+      >
+        <InfoCircle
+          size={16}
+          color="var(--text-muted)"
+          style={{ marginTop: '2px', flexShrink: 0 }}
+        />
+        <span
+          style={{
+            fontSize: '12px',
+            lineHeight: '18px',
+            color: 'var(--text-muted)',
+          }}
+        >
+          {content}
+        </span>
+      </div>
+    )
+  }
 
   return (
     <div className="flex" style={{ gap: '12px', padding: '16px 0' }}>

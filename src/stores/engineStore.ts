@@ -18,7 +18,7 @@ interface EngineState {
   setLoadedModel: (m: ModelInfo | null) => void
 }
 
-export const useEngineStore = create<EngineState>((set, get) => ({
+export const useEngineStore = create<EngineState>((set) => ({
   loadedModel: null,
   generating: false,
   loading: false,
@@ -81,7 +81,6 @@ export const useEngineStore = create<EngineState>((set, get) => ({
   },
 
   startInference: async (chatId) => {
-    if (get().generating) return
     set({ generating: true })
     try {
       await ipc.startInference(chatId)

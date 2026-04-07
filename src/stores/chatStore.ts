@@ -6,6 +6,7 @@ import { useWorkspaceStore } from './workspaceStore'
 import { useEngineStore } from './engineStore'
 
 const AUTO_TITLE_MAX_LENGTH = 50
+const CONTROL_TOKEN_RE = /<\|im_(end|start)\|?>?/g
 
 function deriveTitle(content: string): string {
   const firstLine = content.split('\n')[0].trim()
@@ -13,47 +14,63 @@ function deriveTitle(content: string): string {
   return firstLine.slice(0, AUTO_TITLE_MAX_LENGTH - 1) + '…'
 }
 
+function stripControlTokens(s: string): string {
+  return s.replace(CONTROL_TOKEN_RE, '').trim()
+}
+
+let _listenersActive = false
+let _unlisten: (() => void) | null = null
+
 interface ChatState {
   messages: Message[]
-  activeChatId: string | null
+  currentChatId: string | null
   streamingChatId: string | null
   isStreaming: boolean
   streamingContent: string
   loading: boolean
 
+  setCurrentChat: (chatId: string | null) => void
   loadMessages: (chatId: string) => Promise<void>
   sendMessage: (chatId: string, content: string) => Promise<void>
   appendToken: (chatId: string, token: string) => void
   finalizeStream: (chatId: string, content: string) => Promise<void>
   handleStreamError: (chatId: string, error: string) => void
   clearMessages: () => void
-  initEventListeners: () => Promise<() => void>
+  setupListeners: () => Promise<void>
+  teardownListeners: () => void
 }
 
 export const useChatStore = create<ChatState>((set, get) => ({
   messages: [],
-  activeChatId: null,
+  currentChatId: null,
   streamingChatId: null,
   isStreaming: false,
   streamingContent: '',
   loading: false,
 
-  loadMessages: async (chatId) => {
-    set({ loading: true, messages: [], activeChatId: chatId })
+  setCurrentChat: (chatId) => {
+    const prev = get().currentChatId
+    if (prev === chatId) return
 
     const { streamingChatId } = get()
     if (streamingChatId && streamingChatId !== chatId) {
       set({ isStreaming: false, streamingContent: '' })
     }
 
+    set({ currentChatId: chatId })
+  },
+
+  loadMessages: async (chatId) => {
+    get().setCurrentChat(chatId)
+    set({ loading: true, messages: [] })
+
     try {
       const messages = await ipc.listMessages(chatId)
-
-      if (get().activeChatId !== chatId) return
+      if (get().currentChatId !== chatId) return
       set({ messages, loading: false })
     } catch (err) {
       console.error('Failed to load messages:', err)
-      if (get().activeChatId === chatId) {
+      if (get().currentChatId === chatId) {
         set({ loading: false })
       }
     }
@@ -62,8 +79,7 @@ export const useChatStore = create<ChatState>((set, get) => ({
   sendMessage: async (chatId, content) => {
     try {
       const message = await ipc.createMessage(chatId, 'user', content)
-
-      if (get().activeChatId !== chatId) return
+      if (get().currentChatId !== chatId) return
 
       set((s) => ({ messages: [...s.messages, message] }))
 
@@ -88,32 +104,55 @@ export const useChatStore = create<ChatState>((set, get) => ({
   },
 
   appendToken: (chatId, token) => {
-    const { streamingChatId, activeChatId } = get()
-    if (chatId !== streamingChatId) return
-    if (chatId !== activeChatId) return
-    set((s) => ({ streamingContent: s.streamingContent + token }))
+    const { streamingChatId, currentChatId } = get()
+    if (chatId !== streamingChatId || chatId !== currentChatId) return
+    const clean = stripControlTokens(token)
+    if (!clean) return
+    set((s) => ({ streamingContent: s.streamingContent + clean }))
   },
 
   finalizeStream: async (chatId, content) => {
     const { streamingChatId } = get()
-    if (chatId !== streamingChatId) return
+    const isActiveStream = streamingChatId === chatId
 
     set({ streamingChatId: null })
 
-    if (!content.trim()) {
+    if (!isActiveStream) {
       set({ isStreaming: false, streamingContent: '' })
+    }
+
+    const trimmed = stripControlTokens(content)
+    if (!trimmed) {
+      if (get().currentChatId === chatId) {
+        set((s) => ({
+          messages: [
+            ...s.messages,
+            {
+              id: `empty-${Date.now()}`,
+              chatId,
+              agentId: null,
+              role: 'system' as const,
+              content:
+                'The model returned an empty response. It may not be compatible with this prompt format, or the input was too short to generate a meaningful reply.',
+              metadata: null,
+              createdAt: new Date().toISOString(),
+              sortOrder: s.messages.length,
+            },
+          ],
+          isStreaming: false,
+          streamingContent: '',
+        }))
+      } else {
+        set({ isStreaming: false, streamingContent: '' })
+      }
       useEngineStore.getState().setGenerating(false)
       return
     }
 
     try {
-      const message = await ipc.createMessage(
-        chatId,
-        'assistant',
-        content.trim()
-      )
+      const message = await ipc.createMessage(chatId, 'assistant', trimmed)
 
-      if (get().activeChatId === chatId) {
+      if (get().currentChatId === chatId) {
         set((s) => ({
           messages: [...s.messages, message],
           isStreaming: false,
@@ -143,41 +182,56 @@ export const useChatStore = create<ChatState>((set, get) => ({
     set({
       messages: [],
       loading: false,
-      activeChatId: null,
+      currentChatId: null,
     }),
 
-  initEventListeners: async () => {
-    if (!isTauri) return () => {}
+  setupListeners: async () => {
+    if (_listenersActive) return
+    _listenersActive = true
+
+    if (!isTauri) return
+
     const { listen } = await import('@tauri-apps/api/event')
 
-    const unlisten1 = await listen<{ chatId: string; token: string }>(
+    const u1 = await listen<{ chatId: string; token: string }>(
       'chat:token',
       (event) => {
-        get().appendToken(event.payload.chatId, event.payload.token)
+        useChatStore
+          .getState()
+          .appendToken(event.payload.chatId, event.payload.token)
       }
     )
 
-    const unlisten2 = await listen<{ chatId: string; content: string }>(
+    const u2 = await listen<{ chatId: string; content: string }>(
       'chat:complete',
       (event) => {
-        get().finalizeStream(event.payload.chatId, event.payload.content)
+        useChatStore
+          .getState()
+          .finalizeStream(event.payload.chatId, event.payload.content)
       }
     )
 
-    const unlisten3 = await listen<{ chatId: string; error: string }>(
+    const u3 = await listen<{ chatId: string; error: string }>(
       'chat:error',
       (event) => {
-        get().handleStreamError(
-          event.payload.chatId,
-          event.payload.error
-        )
+        useChatStore
+          .getState()
+          .handleStreamError(event.payload.chatId, event.payload.error)
       }
     )
 
-    return () => {
-      unlisten1()
-      unlisten2()
-      unlisten3()
+    _unlisten = () => {
+      u1()
+      u2()
+      u3()
     }
+  },
+
+  teardownListeners: () => {
+    if (_unlisten) {
+      _unlisten()
+      _unlisten = null
+    }
+    _listenersActive = false
   },
 }))

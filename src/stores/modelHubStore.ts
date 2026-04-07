@@ -93,8 +93,10 @@ interface ModelHubState {
   updateDownloadProgress: (progress: DownloadProgress) => void
   onDownloadComplete: () => void
   onDownloadCancelled: () => void
-  initEventListeners: () => Promise<() => void>
+  initEventListeners: () => Promise<void>
 }
+
+let _dlListenersActive = false
 
 export const useModelHubStore = create<ModelHubState>((set, get) => ({
   query: '',
@@ -208,24 +210,19 @@ export const useModelHubStore = create<ModelHubState>((set, get) => ({
   },
 
   initEventListeners: async () => {
-    if (!isTauri) return () => {}
+    if (!isTauri) return
+    if (_dlListenersActive) return
+    _dlListenersActive = true
+
     const { listen } = await import('@tauri-apps/api/event')
-    const unlisten1 = await listen<DownloadProgress>(
-      'download:progress',
-      (event) => {
-        get().updateDownloadProgress(event.payload)
-      }
-    )
-    const unlisten2 = await listen('download:completed', () => {
-      get().onDownloadComplete()
+    await listen<DownloadProgress>('download:progress', (event) => {
+      useModelHubStore.getState().updateDownloadProgress(event.payload)
     })
-    const unlisten3 = await listen('download:cancelled', () => {
-      get().onDownloadCancelled()
+    await listen('download:completed', () => {
+      useModelHubStore.getState().onDownloadComplete()
     })
-    return () => {
-      unlisten1()
-      unlisten2()
-      unlisten3()
-    }
+    await listen('download:cancelled', () => {
+      useModelHubStore.getState().onDownloadCancelled()
+    })
   },
 }))

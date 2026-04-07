@@ -9,7 +9,7 @@ use llama_cpp_4::context::params::LlamaContextParams;
 use llama_cpp_4::llama_backend::LlamaBackend;
 use llama_cpp_4::llama_batch::LlamaBatch;
 use llama_cpp_4::model::params::LlamaModelParams;
-use llama_cpp_4::model::{AddBos, LlamaModel, Special};
+use llama_cpp_4::model::{AddBos, LlamaChatMessage, LlamaModel, Special};
 use llama_cpp_4::sampling::LlamaSampler;
 use serde::{Deserialize, Serialize};
 use tauri::Emitter;
@@ -302,12 +302,80 @@ fn engine_loop(rx: mpsc::Receiver<Cmd>, cancel: Arc<AtomicBool>, generating: Arc
     log::info!("Engine thread: all resources freed");
 }
 
+const CONTROL_PATTERNS: &[&str] = &[
+    "<|im_end|>",
+    "<|im_start|>",
+    "<|im_end",
+    "<|im_start",
+    "<|endoftext|>",
+    "<|eot_id|>",
+    "<|end|>",
+    "</s>",
+    "<|assistant|>",
+];
+
+fn strip_control_tokens(s: &str) -> String {
+    let mut result = s.to_string();
+    for pat in CONTROL_PATTERNS {
+        result = result.replace(pat, "");
+    }
+    if let Some(pos) = result.find("<|") {
+        if !result[pos..].contains("|>") {
+            result.truncate(pos);
+        }
+    }
+    result.trim().to_string()
+}
+
+fn contains_stop_sequence(output: &str) -> Option<usize> {
+    for pat in &["<|im_end", "<|eot_id", "<|end|>", "<|endoftext"] {
+        if let Some(pos) = output.find(pat) {
+            return Some(pos);
+        }
+    }
+    None
+}
+
 // ── Prompt builder ───────────────────────────────────
 
 const SYSTEM_PROMPT: &str =
     "You are a helpful AI coding assistant. Answer concisely and accurately.";
 
-fn build_prompt(messages: &[(String, String)]) -> String {
+fn build_prompt(model: &LlamaModel, messages: &[(String, String)]) -> String {
+    if let Ok(prompt) = build_prompt_native(model, messages) {
+        return prompt;
+    }
+    log::warn!("Native chat template failed, falling back to ChatML");
+    build_prompt_chatml(messages)
+}
+
+fn build_prompt_native(
+    model: &LlamaModel,
+    messages: &[(String, String)],
+) -> Result<String, String> {
+    let mut chat: Vec<LlamaChatMessage> = Vec::with_capacity(messages.len() + 1);
+
+    chat.push(
+        LlamaChatMessage::new("system".into(), SYSTEM_PROMPT.into())
+            .map_err(|e| e.to_string())?,
+    );
+
+    for (role, content) in messages {
+        chat.push(
+            LlamaChatMessage::new(role.clone(), content.clone())
+                .map_err(|e| e.to_string())?,
+        );
+    }
+
+    let prompt = model
+        .apply_chat_template(None, &chat, true)
+        .map_err(|e| format!("apply_chat_template: {e}"))?;
+
+    log::info!("Prompt ({} chars): {}…", prompt.len(), &prompt[..prompt.len().min(200)]);
+    Ok(prompt)
+}
+
+fn build_prompt_chatml(messages: &[(String, String)]) -> String {
     let mut prompt = format!("<|im_start|>system\n{SYSTEM_PROMPT}<|im_end|>\n");
     for (role, content) in messages {
         prompt.push_str("<|im_start|>");
@@ -333,7 +401,7 @@ fn run_inference(
     chat_id: &str,
     app_handle: &tauri::AppHandle,
 ) -> Result<String, String> {
-    let prompt = build_prompt(messages);
+    let prompt = build_prompt(model, messages);
 
     let tokens = model
         .str_to_token(&prompt, AddBos::Always)
@@ -399,14 +467,25 @@ fn run_inference(
         let _ = decoder.decode_to_string(&bytes, &mut fragment, false);
 
         if !fragment.is_empty() {
-            if output.ends_with("<|im_end") || fragment.contains("<|im_end|>") {
-                if let Some(pos) = output.rfind("<|im_end") {
-                    output.truncate(pos);
+            let prev_len = output.len();
+            output.push_str(&fragment);
+
+            if let Some(pos) = contains_stop_sequence(&output) {
+                output.truncate(pos);
+                if pos > prev_len {
+                    let clean = &fragment[..pos - prev_len];
+                    if !clean.is_empty() {
+                        let _ = app_handle.emit(
+                            "chat:token",
+                            serde_json::json!({
+                                "chatId": chat_id,
+                                "token": clean,
+                            }),
+                        );
+                    }
                 }
                 break;
             }
-
-            output.push_str(&fragment);
 
             let _ = app_handle.emit(
                 "chat:token",
@@ -427,5 +506,6 @@ fn run_inference(
             .map_err(|e| format!("Decode failed: {e}"))?;
     }
 
-    Ok(output.trim().to_string())
+    let result = strip_control_tokens(output.trim());
+    Ok(result)
 }

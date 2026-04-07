@@ -1,4 +1,4 @@
-import { useEffect, useRef } from 'react'
+import { useEffect } from 'react'
 import { Titlebar } from '@/components/titlebar/Titlebar'
 import { Sidebar } from '@/components/sidebar'
 import { ChatView } from '@/components/chat'
@@ -13,28 +13,13 @@ export const App = () => {
   const { activeView, init } = useUiStore()
   const { loadWorkspaces } = useWorkspaceStore()
   const { init: initEngine } = useEngineStore()
-  const { initEventListeners } = useChatStore()
-  const listenersRef = useRef(false)
 
   useEffect(() => {
     init()
     loadWorkspaces()
     initEngine()
+    useChatStore.getState().setupListeners()
   }, [init, loadWorkspaces, initEngine])
-
-  useEffect(() => {
-    if (listenersRef.current) return
-    listenersRef.current = true
-
-    let cleanup: (() => void) | undefined
-    initEventListeners().then((fn) => {
-      cleanup = fn
-    })
-    return () => {
-      cleanup?.()
-      listenersRef.current = false
-    }
-  }, [initEventListeners])
 
   return (
     <div className="flex h-screen flex-col overflow-hidden">
