@@ -1,12 +1,12 @@
-use super::{registry, ToolCall, ToolResult};
+use super::{registry, ToolCall, ToolContext, ToolResult};
 use std::time::Instant;
 
-pub fn execute(call: &ToolCall, workspace: &str) -> ToolResult {
+pub fn execute(call: &ToolCall, ctx: &ToolContext) -> ToolResult {
     let tools = registry();
     let start = Instant::now();
 
     let (success, output) = match tools.get(call.name.as_str()) {
-        Some(func) => match func(&call.args, workspace) {
+        Some(func) => match func(&call.args, ctx) {
             Ok(out) => (true, out),
             Err(e) => (false, e),
         },

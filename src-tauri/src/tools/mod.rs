@@ -25,7 +25,14 @@ pub struct ToolResult {
     pub duration_ms: u64,
 }
 
-pub type ToolFn = fn(args: &serde_json::Value, workspace: &str) -> Result<String, String>;
+#[derive(Debug, Clone, Default)]
+pub struct ToolContext {
+    pub workspace: String,
+    pub shell_blocklist: Vec<String>,
+    pub excluded_patterns: Vec<String>,
+}
+
+pub type ToolFn = fn(args: &serde_json::Value, ctx: &ToolContext) -> Result<String, String>;
 
 pub fn registry() -> HashMap<&'static str, ToolFn> {
     let mut m: HashMap<&'static str, ToolFn> = HashMap::new();

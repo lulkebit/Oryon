@@ -1,7 +1,10 @@
-use crate::tools::{executor, ToolCall, ToolResult};
+use crate::tools::{executor, ToolCall, ToolContext, ToolResult};
+use crate::AppState;
+use tauri::State;
 
 #[tauri::command]
 pub fn execute_tool(
+    state: State<'_, AppState>,
     tool_name: String,
     args: serde_json::Value,
     workspace_path: String,
@@ -10,7 +13,27 @@ pub fn execute_tool(
         name: tool_name,
         args,
     };
-    Ok(executor::execute(&call, &workspace_path))
+    let ctx = build_tool_context(&state, workspace_path);
+    Ok(executor::execute(&call, &ctx))
+}
+
+fn build_tool_context(state: &State<'_, AppState>, workspace: String) -> ToolContext {
+    let db = state.db.lock().ok();
+    let shell_blocklist = db
+        .as_ref()
+        .and_then(|db| db.get_setting("shell_blocklist").ok().flatten())
+        .and_then(|raw| serde_json::from_str(&raw).ok())
+        .unwrap_or_default();
+    let excluded_patterns = db
+        .as_ref()
+        .and_then(|db| db.get_setting("excluded_patterns").ok().flatten())
+        .and_then(|raw| serde_json::from_str(&raw).ok())
+        .unwrap_or_default();
+    ToolContext {
+        workspace,
+        shell_blocklist,
+        excluded_patterns,
+    }
 }
 
 #[tauri::command]

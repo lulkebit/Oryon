@@ -65,6 +65,21 @@ pub async fn start_inference(
         }
         None => (None, None, SamplingParams::default()),
     };
+
+    let shell_blocklist: Vec<String> = db
+        .get_setting("shell_blocklist")
+        .ok()
+        .flatten()
+        .and_then(|raw| serde_json::from_str(&raw).ok())
+        .unwrap_or_default();
+
+    let excluded_patterns: Vec<String> = db
+        .get_setting("excluded_patterns")
+        .ok()
+        .flatten()
+        .and_then(|raw| serde_json::from_str(&raw).ok())
+        .unwrap_or_default();
+
     drop(db);
 
     let messages: Vec<(String, String)> = raw_messages
@@ -85,6 +100,8 @@ pub async fn start_inference(
         workspace_path,
         custom_system_prompt,
         allowed_tools,
+        shell_blocklist,
+        excluded_patterns,
     )
 }
 

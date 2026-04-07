@@ -1,4 +1,5 @@
 import { useEffect } from 'react'
+import { useGlobalShortcuts } from '@/hooks/useGlobalShortcuts'
 import { Titlebar } from '@/components/titlebar/Titlebar'
 import { Sidebar } from '@/components/sidebar'
 import { ChatView } from '@/components/chat'
@@ -16,6 +17,8 @@ export const App = () => {
   const { activeView, init } = useUiStore()
   const { loadWorkspaces } = useWorkspaceStore()
   const { init: initEngine } = useEngineStore()
+
+  useGlobalShortcuts()
 
   useEffect(() => {
     init()

@@ -36,20 +36,21 @@ pub fn resolve_and_check(workspace: &str, relative: &str) -> Result<PathBuf, Str
     Ok(resolved)
 }
 
-const BLOCKED_COMMANDS: &[&str] = &[
+const BUILTIN_BLOCKED: &[&str] = &[
     "rm -rf /",
-    "sudo",
-    "shutdown",
-    "reboot",
-    "mkfs",
-    "dd if=",
     ":(){ :|:& };:",
 ];
 
-pub fn check_command(cmd: &str) -> Result<(), String> {
+pub fn check_command(cmd: &str, extra_blocklist: &[String]) -> Result<(), String> {
     let lower = cmd.to_lowercase();
-    for blocked in BLOCKED_COMMANDS {
+    for blocked in BUILTIN_BLOCKED {
         if lower.contains(blocked) {
+            return Err(format!("Blocked command: contains '{blocked}'"));
+        }
+    }
+    for blocked in extra_blocklist {
+        let b = blocked.to_lowercase();
+        if !b.is_empty() && lower.contains(&b) {
             return Err(format!("Blocked command: contains '{blocked}'"));
         }
     }

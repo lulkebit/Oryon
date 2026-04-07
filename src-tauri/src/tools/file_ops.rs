@@ -1,12 +1,13 @@
 use super::sandbox;
+use super::ToolContext;
 use serde_json::Value;
 use std::fs;
 
-pub fn file_read(args: &Value, workspace: &str) -> Result<String, String> {
+pub fn file_read(args: &Value, ctx: &ToolContext) -> Result<String, String> {
     let path = args["path"]
         .as_str()
         .ok_or("Missing required argument: path")?;
-    let resolved = sandbox::resolve_and_check(workspace, path)?;
+    let resolved = sandbox::resolve_and_check(&ctx.workspace, path)?;
 
     let content =
         fs::read_to_string(&resolved).map_err(|e| format!("Failed to read file: {e}"))?;
@@ -36,7 +37,7 @@ pub fn file_read(args: &Value, workspace: &str) -> Result<String, String> {
     Ok(result)
 }
 
-pub fn file_write(args: &Value, workspace: &str) -> Result<String, String> {
+pub fn file_write(args: &Value, ctx: &ToolContext) -> Result<String, String> {
     let path = args["path"]
         .as_str()
         .ok_or("Missing required argument: path")?;
@@ -44,7 +45,7 @@ pub fn file_write(args: &Value, workspace: &str) -> Result<String, String> {
         .as_str()
         .ok_or("Missing required argument: content")?;
 
-    let resolved = sandbox::resolve_and_check(workspace, path)?;
+    let resolved = sandbox::resolve_and_check(&ctx.workspace, path)?;
 
     if let Some(parent) = resolved.parent() {
         fs::create_dir_all(parent).map_err(|e| format!("Failed to create directories: {e}"))?;
@@ -52,20 +53,16 @@ pub fn file_write(args: &Value, workspace: &str) -> Result<String, String> {
 
     fs::write(&resolved, content).map_err(|e| format!("Failed to write file: {e}"))?;
 
-    Ok(format!(
-        "Wrote {} bytes to {}",
-        content.len(),
-        path
-    ))
+    Ok(format!("Wrote {} bytes to {}", content.len(), path))
 }
 
-pub fn file_create(args: &Value, workspace: &str) -> Result<String, String> {
+pub fn file_create(args: &Value, ctx: &ToolContext) -> Result<String, String> {
     let path = args["path"]
         .as_str()
         .ok_or("Missing required argument: path")?;
     let content = args["content"].as_str().unwrap_or("");
 
-    let resolved = sandbox::resolve_and_check(workspace, path)?;
+    let resolved = sandbox::resolve_and_check(&ctx.workspace, path)?;
 
     if resolved.exists() {
         return Err(format!("File already exists: {path}"));
@@ -80,7 +77,7 @@ pub fn file_create(args: &Value, workspace: &str) -> Result<String, String> {
     Ok(format!("Created {path}"))
 }
 
-pub fn file_patch(args: &Value, workspace: &str) -> Result<String, String> {
+pub fn file_patch(args: &Value, ctx: &ToolContext) -> Result<String, String> {
     let path = args["path"]
         .as_str()
         .ok_or("Missing required argument: path")?;
@@ -92,14 +89,12 @@ pub fn file_patch(args: &Value, workspace: &str) -> Result<String, String> {
         .ok_or("Missing required argument: new_string")?;
     let replace_all = args["all"].as_bool().unwrap_or(false);
 
-    let resolved = sandbox::resolve_and_check(workspace, path)?;
+    let resolved = sandbox::resolve_and_check(&ctx.workspace, path)?;
     let content =
         fs::read_to_string(&resolved).map_err(|e| format!("Failed to read file: {e}"))?;
 
     if !content.contains(old_string) {
-        return Err(format!(
-            "old_string not found in {path}"
-        ));
+        return Err(format!("old_string not found in {path}"));
     }
 
     let (new_content, count) = if replace_all {
@@ -114,12 +109,12 @@ pub fn file_patch(args: &Value, workspace: &str) -> Result<String, String> {
     Ok(format!("Replaced {count} occurrence(s) in {path}"))
 }
 
-pub fn file_delete(args: &Value, workspace: &str) -> Result<String, String> {
+pub fn file_delete(args: &Value, ctx: &ToolContext) -> Result<String, String> {
     let path = args["path"]
         .as_str()
         .ok_or("Missing required argument: path")?;
 
-    let resolved = sandbox::resolve_and_check(workspace, path)?;
+    let resolved = sandbox::resolve_and_check(&ctx.workspace, path)?;
 
     if !resolved.exists() {
         return Err(format!("Path does not exist: {path}"));

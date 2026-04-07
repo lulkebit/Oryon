@@ -1,3 +1,4 @@
+use super::ToolContext;
 use serde_json::Value;
 use std::process::Command;
 
@@ -22,11 +23,11 @@ fn run_git(workspace: &str, args: &[&str]) -> Result<String, String> {
     })
 }
 
-pub fn git_status(_args: &Value, workspace: &str) -> Result<String, String> {
-    run_git(workspace, &["status", "--short", "--branch"])
+pub fn git_status(_args: &Value, ctx: &ToolContext) -> Result<String, String> {
+    run_git(&ctx.workspace, &["status", "--short", "--branch"])
 }
 
-pub fn git_diff(args: &Value, workspace: &str) -> Result<String, String> {
+pub fn git_diff(args: &Value, ctx: &ToolContext) -> Result<String, String> {
     let staged = args["staged"].as_bool().unwrap_or(false);
     let path = args["path"].as_str();
 
@@ -39,10 +40,10 @@ pub fn git_diff(args: &Value, workspace: &str) -> Result<String, String> {
         git_args.push(p);
     }
 
-    run_git(workspace, &git_args)
+    run_git(&ctx.workspace, &git_args)
 }
 
-pub fn git_commit(args: &Value, workspace: &str) -> Result<String, String> {
+pub fn git_commit(args: &Value, ctx: &ToolContext) -> Result<String, String> {
     let message = args["message"]
         .as_str()
         .ok_or("Missing required argument: message")?;
@@ -56,18 +57,18 @@ pub fn git_commit(args: &Value, workspace: &str) -> Result<String, String> {
         .unwrap_or_default();
 
     if paths.is_empty() {
-        run_git(workspace, &["add", "-A"])?;
+        run_git(&ctx.workspace, &["add", "-A"])?;
     } else {
         let mut add_args = vec!["add".to_string()];
         add_args.extend(paths);
         let refs: Vec<&str> = add_args.iter().map(|s| s.as_str()).collect();
-        run_git(workspace, &refs)?;
+        run_git(&ctx.workspace, &refs)?;
     }
 
-    run_git(workspace, &["commit", "-m", message])
+    run_git(&ctx.workspace, &["commit", "-m", message])
 }
 
-pub fn git_log(args: &Value, workspace: &str) -> Result<String, String> {
+pub fn git_log(args: &Value, ctx: &ToolContext) -> Result<String, String> {
     let count = args["count"].as_u64().unwrap_or(10).min(50);
     let count_str = format!("-{count}");
 
@@ -83,5 +84,5 @@ pub fn git_log(args: &Value, workspace: &str) -> Result<String, String> {
         git_args.push(path);
     }
 
-    run_git(workspace, &git_args)
+    run_git(&ctx.workspace, &git_args)
 }

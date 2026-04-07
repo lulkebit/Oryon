@@ -1,22 +1,23 @@
 use super::sandbox;
+use super::ToolContext;
 use serde_json::Value;
 use std::process::Command;
 use std::time::Duration;
 
-pub fn shell_exec(args: &Value, workspace: &str) -> Result<String, String> {
+pub fn shell_exec(args: &Value, ctx: &ToolContext) -> Result<String, String> {
     let command = args["command"]
         .as_str()
         .ok_or("Missing required argument: command")?;
     let cwd_rel = args["cwd"].as_str();
     let timeout_ms = args["timeout"].as_u64().unwrap_or(30_000).min(300_000);
 
-    sandbox::check_command(command)?;
+    sandbox::check_command(command, &ctx.shell_blocklist)?;
 
     let work_dir = match cwd_rel {
-        Some(rel) => sandbox::resolve_and_check(workspace, rel)?
+        Some(rel) => sandbox::resolve_and_check(&ctx.workspace, rel)?
             .to_string_lossy()
             .to_string(),
-        None => workspace.to_string(),
+        None => ctx.workspace.clone(),
     };
 
     let child = Command::new("sh")

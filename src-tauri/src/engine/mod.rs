@@ -75,6 +75,8 @@ enum Cmd {
         workspace_path: Option<String>,
         custom_system_prompt: Option<String>,
         allowed_tools: Option<Vec<String>>,
+        shell_blocklist: Vec<String>,
+        excluded_patterns: Vec<String>,
     },
     Status {
         resp: Resp<EngineStatus>,
@@ -161,6 +163,8 @@ impl Engine {
         workspace_path: Option<String>,
         custom_system_prompt: Option<String>,
         allowed_tools: Option<Vec<String>>,
+        shell_blocklist: Vec<String>,
+        excluded_patterns: Vec<String>,
     ) -> Result<(), String> {
         self.cancel.store(false, Ordering::SeqCst);
         self.tx
@@ -172,6 +176,8 @@ impl Engine {
                 workspace_path,
                 custom_system_prompt,
                 allowed_tools,
+                shell_blocklist,
+                excluded_patterns,
             })
             .map_err(|_| "Engine thread disconnected".to_string())
     }
@@ -249,6 +255,8 @@ fn engine_loop(rx: mpsc::Receiver<Cmd>, cancel: Arc<AtomicBool>, generating: Arc
                 workspace_path,
                 custom_system_prompt,
                 allowed_tools,
+                shell_blocklist,
+                excluded_patterns,
             } => {
                 generating.store(true, Ordering::SeqCst);
 
@@ -264,6 +272,8 @@ fn engine_loop(rx: mpsc::Receiver<Cmd>, cancel: Arc<AtomicBool>, generating: Arc
                         workspace_path.as_deref(),
                         custom_system_prompt.as_deref(),
                         allowed_tools.as_deref(),
+                        &shell_blocklist,
+                        &excluded_patterns,
                     );
                 } else {
                     let _ = app_handle.emit(
@@ -378,6 +388,8 @@ fn run_agentic_loop(
     workspace: Option<&str>,
     custom_system_prompt: Option<&str>,
     allowed_tools: Option<&[String]>,
+    shell_blocklist: &[String],
+    excluded_patterns: &[String],
 ) {
     let mut messages = initial_messages;
     let mut total_output = String::new();
@@ -427,7 +439,12 @@ fn run_agentic_loop(
                             }),
                         );
 
-                        let result = crate::tools::executor::execute(&tool_call, ws);
+                        let tool_ctx = crate::tools::ToolContext {
+                            workspace: ws.to_string(),
+                            shell_blocklist: shell_blocklist.to_vec(),
+                            excluded_patterns: excluded_patterns.to_vec(),
+                        };
+                        let result = crate::tools::executor::execute(&tool_call, &tool_ctx);
                         log::info!(
                             "Tool {} result: success={}, output={}chars",
                             tool_call.name,
