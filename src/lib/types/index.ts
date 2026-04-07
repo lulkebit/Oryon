@@ -96,4 +96,4 @@ export interface Model {
 
 export type Theme = 'system' | 'dark' | 'light'
 
-export type ActiveView = 'chat' | 'model-hub' | 'settings'
+export type ActiveView = 'chat' | 'models' | 'settings'

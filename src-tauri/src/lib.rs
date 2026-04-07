@@ -1,5 +1,7 @@
 mod commands;
 mod db;
+mod engine;
+mod hub;
 
 use db::Database;
 use std::sync::Mutex;
@@ -11,6 +13,9 @@ pub struct AppState {
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
+    let inference_engine =
+        engine::Engine::spawn().expect("failed to start inference engine");
+
     tauri::Builder::default()
         .plugin(tauri_plugin_dialog::init())
         .setup(|app| {
@@ -37,10 +42,14 @@ pub fn run() {
 
             Ok(())
         })
+        .manage(inference_engine)
+        .manage(commands::hub::DownloadState::new())
         .invoke_handler(tauri::generate_handler![
             commands::get_app_info,
             commands::get_theme,
             commands::set_theme,
+            commands::get_setting,
+            commands::set_setting,
             commands::list_workspaces,
             commands::create_workspace,
             commands::rename_workspace,
@@ -51,8 +60,18 @@ pub fn run() {
             commands::delete_chat,
             commands::list_messages,
             commands::create_message,
-            commands::get_setting,
-            commands::set_setting,
+            commands::engine::load_model,
+            commands::engine::unload_model,
+            commands::engine::start_inference,
+            commands::engine::stop_inference,
+            commands::engine::get_engine_status,
+            commands::engine::get_hardware_info,
+            commands::hub::search_models,
+            commands::hub::search_models_featured,
+            commands::hub::download_model,
+            commands::hub::cancel_download,
+            commands::hub::list_downloaded_models,
+            commands::hub::delete_model,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

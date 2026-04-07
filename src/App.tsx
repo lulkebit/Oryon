@@ -6,15 +6,18 @@ import { ModelHubView } from '@/components/model-hub'
 import { SettingsView } from '@/components/settings'
 import { useUiStore } from '@/stores/uiStore'
 import { useWorkspaceStore } from '@/stores/workspaceStore'
+import { useEngineStore } from '@/stores/engineStore'
 
 export const App = () => {
   const { activeView, init } = useUiStore()
   const { loadWorkspaces } = useWorkspaceStore()
+  const { init: initEngine } = useEngineStore()
 
   useEffect(() => {
     init()
     loadWorkspaces()
-  }, [init, loadWorkspaces])
+    initEngine()
+  }, [init, loadWorkspaces, initEngine])
 
   return (
     <div className="flex h-screen flex-col overflow-hidden">
@@ -26,7 +29,7 @@ export const App = () => {
           style={{ background: 'var(--bg-base)' }}
         >
           {activeView === 'chat' && <ChatView />}
-          {activeView === 'model-hub' && <ModelHubView />}
+          {activeView === 'models' && <ModelHubView />}
           {activeView === 'settings' && <SettingsView />}
         </main>
       </div>

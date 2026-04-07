@@ -206,6 +206,17 @@ input:focus-visible {
   background: var(--text-muted);
 }
 
+/* ── Hide scrollbar for horizontal scroll areas ──────────── */
+
+.hide-scrollbar {
+  scrollbar-width: none;
+  -ms-overflow-style: none;
+}
+
+.hide-scrollbar::-webkit-scrollbar {
+  display: none;
+}
+
 /* ── Reduced motion ────────────────────────────────────── */
 
 @media (prefers-reduced-motion: reduce) {

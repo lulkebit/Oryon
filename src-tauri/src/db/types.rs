@@ -35,3 +35,15 @@ pub struct Message {
     pub created_at: String,
     pub sort_order: i32,
 }
+
+#[derive(Debug, Serialize, Deserialize, Clone)]
+#[serde(rename_all = "camelCase")]
+pub struct StoredModel {
+    pub id: String,
+    pub name: String,
+    pub filename: String,
+    pub hf_repo_id: Option<String>,
+    pub file_size: u64,
+    pub storage_path: String,
+    pub downloaded_at: String,
+}

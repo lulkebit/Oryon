@@ -19,3 +19,22 @@ export {
   deleteChat,
 } from './chats'
 export { listMessages, createMessage } from './messages'
+export {
+  loadModel,
+  unloadModel,
+  startInference,
+  stopInference,
+  getEngineStatus,
+  getHardwareInfo,
+  pickModelFile,
+} from './engine'
+export type { ModelInfo, EngineStatus, HardwareInfo } from './engine'
+export {
+  searchModels,
+  searchModelsFeatured,
+  downloadModel,
+  cancelDownload,
+  listDownloadedModels,
+  deleteModel,
+} from './hub'
+export type { HfModelResult, GgufFile, StoredModel } from './hub'

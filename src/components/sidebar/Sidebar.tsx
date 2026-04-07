@@ -166,9 +166,9 @@ export const Sidebar = () => {
           icon={<Box1 size={18} color="currentColor" />}
           label="Model Hub"
           collapsed={sidebarCollapsed}
-          active={activeView === 'model-hub'}
+          active={activeView === 'models'}
           onClick={() =>
-            setActiveView(activeView === 'model-hub' ? 'chat' : 'model-hub')
+            setActiveView(activeView === 'models' ? 'chat' : 'models')
           }
         />
       </div>

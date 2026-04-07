@@ -1,4 +1,6 @@
 mod chat;
+pub mod engine;
+pub mod hub;
 mod message;
 mod workspace;
 

@@ -4,7 +4,7 @@ pub mod types;
 use rusqlite::Connection;
 use std::path::Path;
 use thiserror::Error;
-use types::{Chat, Message, Workspace};
+use types::{Chat, Message, StoredModel, Workspace};
 
 #[derive(Error, Debug)]
 pub enum DbError {
@@ -253,5 +253,73 @@ impl Database {
             created_at: now,
             sort_order,
         })
+    }
+
+    // ── Models ───────────────────────────────────────────
+
+    pub fn save_model(
+        &self,
+        model_id: &str,
+        filename: &str,
+        hf_repo_id: &str,
+        file_size: u64,
+        storage_path: &str,
+    ) -> Result<(), DbError> {
+        let now = chrono::Utc::now().to_rfc3339();
+        let name = filename
+            .strip_suffix(".gguf")
+            .unwrap_or(filename)
+            .to_string();
+        self.conn.execute(
+            "INSERT OR REPLACE INTO models (id, name, filename, hf_repo_id, file_size, storage_path, downloaded_at)
+             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7)",
+            rusqlite::params![model_id, name, filename, hf_repo_id, file_size as i64, storage_path, now],
+        )?;
+        Ok(())
+    }
+
+    pub fn list_models(&self) -> Result<Vec<StoredModel>, DbError> {
+        let mut stmt = self.conn.prepare(
+            "SELECT id, name, filename, hf_repo_id, file_size, storage_path, downloaded_at
+             FROM models ORDER BY downloaded_at DESC",
+        )?;
+        let rows = stmt.query_map([], |row| {
+            Ok(StoredModel {
+                id: row.get(0)?,
+                name: row.get(1)?,
+                filename: row.get(2)?,
+                hf_repo_id: row.get(3)?,
+                file_size: row.get::<_, i64>(4)? as u64,
+                storage_path: row.get(5)?,
+                downloaded_at: row.get(6)?,
+            })
+        })?;
+        rows.collect::<Result<Vec<_>, _>>().map_err(Into::into)
+    }
+
+    pub fn get_model(&self, id: &str) -> Result<Option<StoredModel>, DbError> {
+        let mut stmt = self.conn.prepare(
+            "SELECT id, name, filename, hf_repo_id, file_size, storage_path, downloaded_at
+             FROM models WHERE id = ?1",
+        )?;
+        let result = stmt
+            .query_row([id], |row| {
+                Ok(StoredModel {
+                    id: row.get(0)?,
+                    name: row.get(1)?,
+                    filename: row.get(2)?,
+                    hf_repo_id: row.get(3)?,
+                    file_size: row.get::<_, i64>(4)? as u64,
+                    storage_path: row.get(5)?,
+                    downloaded_at: row.get(6)?,
+                })
+            })
+            .ok();
+        Ok(result)
+    }
+
+    pub fn delete_model(&self, id: &str) -> Result<(), DbError> {
+        self.conn.execute("DELETE FROM models WHERE id = ?1", [id])?;
+        Ok(())
     }
 }

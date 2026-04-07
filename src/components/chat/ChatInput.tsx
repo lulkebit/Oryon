@@ -1,12 +1,19 @@
 import { useState, useRef, useCallback } from 'react'
-import { Add, Send2 } from 'iconsax-react'
+import { Add, Send2, StopCircle } from 'iconsax-react'
 
 interface ChatInputProps {
   onSend: (content: string) => void
+  onStop?: () => void
   disabled?: boolean
+  isStreaming?: boolean
 }
 
-export const ChatInput = ({ onSend, disabled }: ChatInputProps) => {
+export const ChatInput = ({
+  onSend,
+  onStop,
+  disabled,
+  isStreaming,
+}: ChatInputProps) => {
   const [value, setValue] = useState('')
   const textareaRef = useRef<HTMLTextAreaElement>(null)
 
@@ -51,7 +58,6 @@ export const ChatInput = ({ onSend, disabled }: ChatInputProps) => {
           borderColor: 'var(--border-subtle)',
         }}
       >
-        {/* Attach button */}
         <button
           className="flex shrink-0 items-center justify-center transition-colors"
           style={{
@@ -71,7 +77,6 @@ export const ChatInput = ({ onSend, disabled }: ChatInputProps) => {
           <Add size={18} color="currentColor" />
         </button>
 
-        {/* Input */}
         <textarea
           ref={textareaRef}
           value={value}
@@ -91,23 +96,41 @@ export const ChatInput = ({ onSend, disabled }: ChatInputProps) => {
           disabled={disabled}
         />
 
-        {/* Send button */}
-        <button
-          onClick={handleSend}
-          disabled={!hasContent || disabled}
-          className="flex shrink-0 items-center justify-center transition-colors"
-          style={{
-            width: '32px',
-            height: '32px',
-            borderRadius: '9999px',
-            background: hasContent ? 'var(--accent)' : 'var(--bg-elevated)',
-            color: hasContent ? 'var(--text-inverse)' : 'var(--text-muted)',
-            opacity: !hasContent || disabled ? 0.5 : 1,
-          }}
-          aria-label="Send message"
-        >
-          <Send2 size={16} color="currentColor" />
-        </button>
+        {isStreaming ? (
+          <button
+            onClick={onStop}
+            className="flex shrink-0 items-center justify-center transition-colors"
+            style={{
+              width: '32px',
+              height: '32px',
+              borderRadius: '9999px',
+              background: 'var(--status-error)',
+              color: 'var(--text-inverse)',
+            }}
+            aria-label="Stop generation"
+          >
+            <StopCircle size={16} color="currentColor" variant="Bold" />
+          </button>
+        ) : (
+          <button
+            onClick={handleSend}
+            disabled={!hasContent || disabled}
+            className="flex shrink-0 items-center justify-center transition-colors"
+            style={{
+              width: '32px',
+              height: '32px',
+              borderRadius: '9999px',
+              background: hasContent ? 'var(--accent)' : 'var(--bg-elevated)',
+              color: hasContent
+                ? 'var(--text-inverse)'
+                : 'var(--text-muted)',
+              opacity: !hasContent || disabled ? 0.5 : 1,
+            }}
+            aria-label="Send message"
+          >
+            <Send2 size={16} color="currentColor" />
+          </button>
+        )}
       </div>
     </div>
   )
