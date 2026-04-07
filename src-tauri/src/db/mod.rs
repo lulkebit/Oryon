@@ -4,7 +4,7 @@ pub mod types;
 use rusqlite::Connection;
 use std::path::Path;
 use thiserror::Error;
-use types::{Chat, Message, StoredModel, Workspace};
+use types::{Agent, Chat, Message, StoredModel, Workspace};
 
 #[derive(Error, Debug)]
 pub enum DbError {
@@ -365,6 +365,173 @@ impl Database {
 
     pub fn delete_model(&self, id: &str) -> Result<(), DbError> {
         self.conn.execute("DELETE FROM models WHERE id = ?1", [id])?;
+        Ok(())
+    }
+
+    // ── Agents ────────────────────────────────────────────
+
+    pub fn list_agents(&self) -> Result<Vec<Agent>, DbError> {
+        let mut stmt = self.conn.prepare(
+            "SELECT id, name, model_id, system_prompt, tools, temperature,
+                    max_tokens, color, created_at, updated_at
+             FROM agents ORDER BY created_at",
+        )?;
+        let rows = stmt.query_map([], |row| {
+            Ok(Agent {
+                id: row.get(0)?,
+                name: row.get(1)?,
+                model_id: row.get(2)?,
+                system_prompt: row.get(3)?,
+                tools: row.get(4)?,
+                temperature: row.get(5)?,
+                max_tokens: row.get(6)?,
+                color: row.get(7)?,
+                created_at: row.get(8)?,
+                updated_at: row.get(9)?,
+            })
+        })?;
+        rows.collect::<Result<Vec<_>, _>>().map_err(Into::into)
+    }
+
+    pub fn get_agent(&self, id: &str) -> Result<Option<Agent>, DbError> {
+        let mut stmt = self.conn.prepare(
+            "SELECT id, name, model_id, system_prompt, tools, temperature,
+                    max_tokens, color, created_at, updated_at
+             FROM agents WHERE id = ?1",
+        )?;
+        let mut rows = stmt.query_map([id], |row| {
+            Ok(Agent {
+                id: row.get(0)?,
+                name: row.get(1)?,
+                model_id: row.get(2)?,
+                system_prompt: row.get(3)?,
+                tools: row.get(4)?,
+                temperature: row.get(5)?,
+                max_tokens: row.get(6)?,
+                color: row.get(7)?,
+                created_at: row.get(8)?,
+                updated_at: row.get(9)?,
+            })
+        })?;
+        match rows.next() {
+            Some(Ok(a)) => Ok(Some(a)),
+            Some(Err(e)) => Err(e.into()),
+            None => Ok(None),
+        }
+    }
+
+    pub fn create_agent(
+        &self,
+        name: &str,
+        system_prompt: &str,
+        tools: &str,
+        temperature: f64,
+        max_tokens: i32,
+        color: &str,
+    ) -> Result<Agent, DbError> {
+        let id = uuid::Uuid::now_v7().to_string();
+        let now = chrono::Utc::now().to_rfc3339();
+        self.conn.execute(
+            "INSERT INTO agents (id, name, system_prompt, tools, temperature, max_tokens, color, created_at, updated_at)
+             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9)",
+            rusqlite::params![id, name, system_prompt, tools, temperature, max_tokens, color, now, now],
+        )?;
+        Ok(Agent {
+            id,
+            name: name.to_string(),
+            model_id: None,
+            system_prompt: system_prompt.to_string(),
+            tools: tools.to_string(),
+            temperature,
+            max_tokens,
+            color: color.to_string(),
+            created_at: now.clone(),
+            updated_at: now,
+        })
+    }
+
+    pub fn update_agent(
+        &self,
+        id: &str,
+        name: &str,
+        system_prompt: &str,
+        tools: &str,
+        temperature: f64,
+        max_tokens: i32,
+        color: &str,
+        model_id: Option<&str>,
+    ) -> Result<(), DbError> {
+        let now = chrono::Utc::now().to_rfc3339();
+        self.conn.execute(
+            "UPDATE agents SET name=?1, system_prompt=?2, tools=?3, temperature=?4,
+             max_tokens=?5, color=?6, model_id=?7, updated_at=?8 WHERE id=?9",
+            rusqlite::params![name, system_prompt, tools, temperature, max_tokens, color, model_id, now, id],
+        )?;
+        Ok(())
+    }
+
+    pub fn delete_agent(&self, id: &str) -> Result<(), DbError> {
+        self.conn
+            .execute("DELETE FROM agents WHERE id = ?1", [id])?;
+        Ok(())
+    }
+
+    pub fn ensure_default_agent(&self) -> Result<Agent, DbError> {
+        let agents = self.list_agents()?;
+        if let Some(a) = agents.into_iter().next() {
+            return Ok(a);
+        }
+        let default_tools = r#"["file_read","file_write","file_create","file_patch","file_delete","glob","grep","shell_exec","git_status","git_diff","git_commit","git_log"]"#;
+        self.create_agent(
+            "Oryon",
+            "You are a helpful AI coding assistant. Answer concisely and accurately. Use the given tool calls as much as possible and wisely.",
+            default_tools,
+            0.7,
+            4096,
+            "#C2D8C4",
+        )
+    }
+
+    pub fn get_chat_agent(&self, chat_id: &str) -> Result<Option<Agent>, DbError> {
+        let mut stmt = self.conn.prepare(
+            "SELECT a.id, a.name, a.model_id, a.system_prompt, a.tools, a.temperature,
+                    a.max_tokens, a.color, a.created_at, a.updated_at
+             FROM agents a JOIN chat_agents ca ON a.id = ca.agent_id
+             WHERE ca.chat_id = ?1 AND ca.is_active = 1
+             LIMIT 1",
+        )?;
+        let mut rows = stmt.query_map([chat_id], |row| {
+            Ok(Agent {
+                id: row.get(0)?,
+                name: row.get(1)?,
+                model_id: row.get(2)?,
+                system_prompt: row.get(3)?,
+                tools: row.get(4)?,
+                temperature: row.get(5)?,
+                max_tokens: row.get(6)?,
+                color: row.get(7)?,
+                created_at: row.get(8)?,
+                updated_at: row.get(9)?,
+            })
+        })?;
+        match rows.next() {
+            Some(Ok(a)) => Ok(Some(a)),
+            Some(Err(e)) => Err(e.into()),
+            None => Ok(None),
+        }
+    }
+
+    pub fn set_chat_agent(&self, chat_id: &str, agent_id: &str) -> Result<(), DbError> {
+        let now = chrono::Utc::now().to_rfc3339();
+        self.conn.execute(
+            "UPDATE chat_agents SET is_active = 0 WHERE chat_id = ?1",
+            [chat_id],
+        )?;
+        self.conn.execute(
+            "INSERT OR REPLACE INTO chat_agents (chat_id, agent_id, added_at, is_active)
+             VALUES (?1, ?2, ?3, 1)",
+            rusqlite::params![chat_id, agent_id, now],
+        )?;
         Ok(())
     }
 }

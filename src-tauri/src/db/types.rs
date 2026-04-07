@@ -38,6 +38,21 @@ pub struct Message {
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
 #[serde(rename_all = "camelCase")]
+pub struct Agent {
+    pub id: String,
+    pub name: String,
+    pub model_id: Option<String>,
+    pub system_prompt: String,
+    pub tools: String,
+    pub temperature: f64,
+    pub max_tokens: i32,
+    pub color: String,
+    pub created_at: String,
+    pub updated_at: String,
+}
+
+#[derive(Debug, Serialize, Deserialize, Clone)]
+#[serde(rename_all = "camelCase")]
 pub struct StoredModel {
     pub id: String,
     pub name: String,

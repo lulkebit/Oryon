@@ -4,10 +4,12 @@ import { Sidebar } from '@/components/sidebar'
 import { ChatView } from '@/components/chat'
 import { ModelHubView } from '@/components/model-hub'
 import { SettingsView } from '@/components/settings'
+import { AgentConfigView } from '@/components/agents/AgentConfigView'
 import { useUiStore } from '@/stores/uiStore'
 import { useWorkspaceStore } from '@/stores/workspaceStore'
 import { useEngineStore } from '@/stores/engineStore'
 import { useChatStore } from '@/stores/chatStore'
+import { useAgentStore } from '@/stores/agentStore'
 
 export const App = () => {
   const { activeView, init } = useUiStore()
@@ -19,6 +21,7 @@ export const App = () => {
     loadWorkspaces()
     initEngine()
     useChatStore.getState().setupListeners()
+    useAgentStore.getState().loadAgents()
   }, [init, loadWorkspaces, initEngine])
 
   return (
@@ -33,6 +36,11 @@ export const App = () => {
           {activeView === 'chat' && <ChatView />}
           {activeView === 'models' && <ModelHubView />}
           {activeView === 'settings' && <SettingsView />}
+          {activeView === 'agents' && (
+            <AgentConfigView
+              onBack={() => useUiStore.getState().setActiveView('chat')}
+            />
+          )}
         </main>
       </div>
     </div>

@@ -37,6 +37,10 @@ pub fn run() {
             let db_path = app_dir.join("oryon.db");
             let database = Database::new(&db_path).expect("failed to initialize database");
 
+            if let Err(e) = database.ensure_default_agent() {
+                log::warn!("Failed to ensure default agent: {e}");
+            }
+
             app.manage(AppState {
                 db: Mutex::new(database),
             });
@@ -75,6 +79,13 @@ pub fn run() {
             commands::hub::delete_model,
             commands::tools::execute_tool,
             commands::tools::list_available_tools,
+            commands::agent::list_agents,
+            commands::agent::get_agent,
+            commands::agent::create_agent,
+            commands::agent::update_agent,
+            commands::agent::delete_agent,
+            commands::agent::get_chat_agent,
+            commands::agent::set_chat_agent,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

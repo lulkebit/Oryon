@@ -1,5 +1,5 @@
 import { useCallback, useRef, useState } from 'react'
-import { Add, Box1, Setting2, FolderOpen } from 'iconsax-react'
+import { Add, Box1, Setting2, FolderOpen, People } from 'iconsax-react'
 import { useUiStore } from '@/stores/uiStore'
 import { useWorkspaceStore } from '@/stores/workspaceStore'
 import { SidebarItem } from './SidebarItem'
@@ -161,6 +161,15 @@ export const Sidebar = () => {
           onClick={handleNewChat}
           disabled={workspaces.length === 0}
           shortcut="⌘N"
+        />
+        <SidebarButton
+          icon={<People size={18} color="currentColor" />}
+          label="Agents"
+          collapsed={sidebarCollapsed}
+          active={activeView === 'agents'}
+          onClick={() =>
+            setActiveView(activeView === 'agents' ? 'chat' : 'agents')
+          }
         />
         <SidebarButton
           icon={<Box1 size={18} color="currentColor" />}

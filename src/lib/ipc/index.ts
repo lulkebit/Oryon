@@ -40,3 +40,12 @@ export {
 export type { HfModelResult, GgufFile, StoredModel } from './hub'
 export { executeTool, listAvailableTools } from './tools'
 export type { ToolResult, ToolInfo } from './tools'
+export {
+  listAgents,
+  getAgent,
+  createAgent,
+  updateAgent,
+  deleteAgent,
+  getChatAgent,
+  setChatAgent,
+} from './agents'

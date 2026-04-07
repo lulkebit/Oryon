@@ -31,12 +31,40 @@ pub async fn start_inference(
     let raw_messages = db.list_messages(&chat_id).map_err(|e| e.to_string())?;
 
     let chat = db.get_chat(&chat_id).map_err(|e| e.to_string())?;
-    let workspace_path = chat.and_then(|c| {
+    let workspace_path = chat.as_ref().and_then(|c| {
         db.get_workspace(&c.workspace_id)
             .ok()
             .flatten()
             .map(|w| w.path)
     });
+
+    let agent = db
+        .get_chat_agent(&chat_id)
+        .ok()
+        .flatten()
+        .or_else(|| db.ensure_default_agent().ok());
+
+    let (custom_system_prompt, allowed_tools, sampling) = match &agent {
+        Some(a) => {
+            let tools: Vec<String> =
+                serde_json::from_str(&a.tools).unwrap_or_default();
+            let sp = if a.system_prompt.is_empty() {
+                None
+            } else {
+                Some(a.system_prompt.clone())
+            };
+            (
+                sp,
+                Some(tools),
+                SamplingParams {
+                    temperature: a.temperature as f32,
+                    max_tokens: a.max_tokens,
+                    ..SamplingParams::default()
+                },
+            )
+        }
+        None => (None, None, SamplingParams::default()),
+    };
     drop(db);
 
     let messages: Vec<(String, String)> = raw_messages
@@ -52,9 +80,11 @@ pub async fn start_inference(
     engine.start_generate(
         chat_id,
         messages,
-        SamplingParams::default(),
+        sampling,
         app_handle,
         workspace_path,
+        custom_system_prompt,
+        allowed_tools,
     )
 }
 

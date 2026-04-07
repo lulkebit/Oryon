@@ -111,6 +111,11 @@ export const useWorkspaceStore = create<WorkspaceState>((set, get) => ({
         chats: [chat, ...s.chats],
         activeChatId: chat.id,
       }))
+      const { useAgentStore } = await import('./agentStore')
+      const agents = useAgentStore.getState().agents
+      if (agents.length > 0) {
+        await ipc.setChatAgent(chat.id, agents[0].id)
+      }
     } catch (err) {
       console.error('Failed to create chat:', err)
     }

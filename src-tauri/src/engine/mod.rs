@@ -73,6 +73,8 @@ enum Cmd {
         params: SamplingParams,
         app_handle: tauri::AppHandle,
         workspace_path: Option<String>,
+        custom_system_prompt: Option<String>,
+        allowed_tools: Option<Vec<String>>,
     },
     Status {
         resp: Resp<EngineStatus>,
@@ -157,6 +159,8 @@ impl Engine {
         params: SamplingParams,
         app_handle: tauri::AppHandle,
         workspace_path: Option<String>,
+        custom_system_prompt: Option<String>,
+        allowed_tools: Option<Vec<String>>,
     ) -> Result<(), String> {
         self.cancel.store(false, Ordering::SeqCst);
         self.tx
@@ -166,6 +170,8 @@ impl Engine {
                 params,
                 app_handle,
                 workspace_path,
+                custom_system_prompt,
+                allowed_tools,
             })
             .map_err(|_| "Engine thread disconnected".to_string())
     }
@@ -241,6 +247,8 @@ fn engine_loop(rx: mpsc::Receiver<Cmd>, cancel: Arc<AtomicBool>, generating: Arc
                 params,
                 app_handle,
                 workspace_path,
+                custom_system_prompt,
+                allowed_tools,
             } => {
                 generating.store(true, Ordering::SeqCst);
 
@@ -254,6 +262,8 @@ fn engine_loop(rx: mpsc::Receiver<Cmd>, cancel: Arc<AtomicBool>, generating: Arc
                         &chat_id,
                         &app_handle,
                         workspace_path.as_deref(),
+                        custom_system_prompt.as_deref(),
+                        allowed_tools.as_deref(),
                     );
                 } else {
                     let _ = app_handle.emit(
@@ -366,6 +376,8 @@ fn run_agentic_loop(
     chat_id: &str,
     app_handle: &tauri::AppHandle,
     workspace: Option<&str>,
+    custom_system_prompt: Option<&str>,
+    allowed_tools: Option<&[String]>,
 ) {
     let mut messages = initial_messages;
     let mut total_output = String::new();
@@ -377,7 +389,7 @@ fn run_agentic_loop(
             total_output.len()
         );
 
-        match run_inference(backend, model, &messages, params, cancel, chat_id, app_handle, workspace) {
+        match run_inference(backend, model, &messages, params, cancel, chat_id, app_handle, workspace, custom_system_prompt, allowed_tools) {
             Ok(content) => {
                 log::info!(
                     "Round {round} inference result: {} chars, has_tool_call={}",
@@ -395,6 +407,17 @@ fn run_agentic_loop(
                     }
 
                     if let Some(ws) = workspace {
+                        if let Some(ref list) = allowed_tools {
+                            if !list.iter().any(|t| t == &tool_call.name) {
+                                log::warn!("Tool '{}' not allowed for this agent", tool_call.name);
+                                messages.push((
+                                    "tool".to_string(),
+                                    format!("<tool_result>\nError: Tool '{}' is not enabled for this agent.\n</tool_result>", tool_call.name),
+                                ));
+                                continue;
+                            }
+                        }
+
                         let _ = app_handle.emit(
                             "tool:call",
                             serde_json::json!({
@@ -590,41 +613,57 @@ fn contains_stop_sequence(output: &str) -> Option<usize> {
 // ── Prompt builder ───────────────────────────────────
 
 const SYSTEM_PROMPT_BASE: &str =
-    "You are a helpful AI coding assistant. Answer concisely and accurately.";
+    "You are a helpful AI coding assistant. Answer concisely and accurately. Use the given tool calls as much as possible and wisely.";
 
-const TOOL_PROMPT_SECTION: &str = r#"
+fn build_tool_section(allowed_tools: Option<&[String]>) -> String {
+    struct ToolDef {
+        name: &'static str,
+        json: &'static str,
+    }
 
-# Tools
+    const ALL_TOOLS: &[ToolDef] = &[
+        ToolDef { name: "glob", json: r#"{"type":"function","function":{"name":"glob","description":"Find files matching a glob pattern in the workspace","parameters":{"type":"object","properties":{"pattern":{"type":"string","description":"Glob pattern like * or **/*.rs"}},"required":["pattern"]}}}"# },
+        ToolDef { name: "grep", json: r#"{"type":"function","function":{"name":"grep","description":"Search file contents using regex","parameters":{"type":"object","properties":{"pattern":{"type":"string","description":"Regex search pattern"},"glob":{"type":"string","description":"File filter like *.ts"}},"required":["pattern"]}}}"# },
+        ToolDef { name: "file_read", json: r#"{"type":"function","function":{"name":"file_read","description":"Read the contents of a file","parameters":{"type":"object","properties":{"path":{"type":"string","description":"Relative file path"}},"required":["path"]}}}"# },
+        ToolDef { name: "file_write", json: r#"{"type":"function","function":{"name":"file_write","description":"Write or overwrite a file","parameters":{"type":"object","properties":{"path":{"type":"string","description":"Relative file path"},"content":{"type":"string","description":"File content"}},"required":["path","content"]}}}"# },
+        ToolDef { name: "file_patch", json: r#"{"type":"function","function":{"name":"file_patch","description":"Search and replace text in a file","parameters":{"type":"object","properties":{"path":{"type":"string","description":"Relative file path"},"old_string":{"type":"string","description":"Text to find"},"new_string":{"type":"string","description":"Replacement text"}},"required":["path","old_string","new_string"]}}}"# },
+        ToolDef { name: "file_create", json: r#"{"type":"function","function":{"name":"file_create","description":"Create a new file","parameters":{"type":"object","properties":{"path":{"type":"string","description":"Relative file path"},"content":{"type":"string","description":"File content"}},"required":["path","content"]}}}"# },
+        ToolDef { name: "file_delete", json: r#"{"type":"function","function":{"name":"file_delete","description":"Delete a file","parameters":{"type":"object","properties":{"path":{"type":"string","description":"Relative file path"}},"required":["path"]}}}"# },
+        ToolDef { name: "shell_exec", json: r#"{"type":"function","function":{"name":"shell_exec","description":"Execute a shell command","parameters":{"type":"object","properties":{"command":{"type":"string","description":"Shell command to run"}},"required":["command"]}}}"# },
+        ToolDef { name: "git_status", json: r#"{"type":"function","function":{"name":"git_status","description":"Show git status of the workspace","parameters":{"type":"object","properties":{}}}}"# },
+        ToolDef { name: "git_diff", json: r#"{"type":"function","function":{"name":"git_diff","description":"Show git diffs","parameters":{"type":"object","properties":{"staged":{"type":"boolean","description":"Show staged changes"}}}}}"# },
+        ToolDef { name: "git_commit", json: r#"{"type":"function","function":{"name":"git_commit","description":"Stage and commit changes","parameters":{"type":"object","properties":{"message":{"type":"string","description":"Commit message"}},"required":["message"]}}}"# },
+        ToolDef { name: "git_log", json: r#"{"type":"function","function":{"name":"git_log","description":"Show recent commit history","parameters":{"type":"object","properties":{"count":{"type":"number","description":"Number of commits"}}}}}"# },
+    ];
 
-You may call one or more functions to assist with the user query.
+    let filtered: Vec<&ToolDef> = match allowed_tools {
+        Some(list) => ALL_TOOLS.iter().filter(|t| list.iter().any(|a| a == t.name)).collect(),
+        None => ALL_TOOLS.iter().collect(),
+    };
 
-You are provided with function signatures within <tools></tools> XML tags:
-<tools>
-{"type":"function","function":{"name":"glob","description":"Find files matching a glob pattern in the workspace","parameters":{"type":"object","properties":{"pattern":{"type":"string","description":"Glob pattern like * or **/*.rs"}},"required":["pattern"]}}}
-{"type":"function","function":{"name":"grep","description":"Search file contents using regex","parameters":{"type":"object","properties":{"pattern":{"type":"string","description":"Regex search pattern"},"glob":{"type":"string","description":"File filter like *.ts"}},"required":["pattern"]}}}
-{"type":"function","function":{"name":"file_read","description":"Read the contents of a file","parameters":{"type":"object","properties":{"path":{"type":"string","description":"Relative file path"}},"required":["path"]}}}
-{"type":"function","function":{"name":"file_write","description":"Write or overwrite a file","parameters":{"type":"object","properties":{"path":{"type":"string","description":"Relative file path"},"content":{"type":"string","description":"File content"}},"required":["path","content"]}}}
-{"type":"function","function":{"name":"file_patch","description":"Search and replace text in a file","parameters":{"type":"object","properties":{"path":{"type":"string","description":"Relative file path"},"old_string":{"type":"string","description":"Text to find"},"new_string":{"type":"string","description":"Replacement text"}},"required":["path","old_string","new_string"]}}}
-{"type":"function","function":{"name":"file_create","description":"Create a new file","parameters":{"type":"object","properties":{"path":{"type":"string","description":"Relative file path"},"content":{"type":"string","description":"File content"}},"required":["path","content"]}}}
-{"type":"function","function":{"name":"file_delete","description":"Delete a file","parameters":{"type":"object","properties":{"path":{"type":"string","description":"Relative file path"}},"required":["path"]}}}
-{"type":"function","function":{"name":"shell_exec","description":"Execute a shell command","parameters":{"type":"object","properties":{"command":{"type":"string","description":"Shell command to run"}},"required":["command"]}}}
-{"type":"function","function":{"name":"git_status","description":"Show git status of the workspace","parameters":{"type":"object","properties":{}}}}
-{"type":"function","function":{"name":"git_diff","description":"Show git diffs","parameters":{"type":"object","properties":{"staged":{"type":"boolean","description":"Show staged changes"}}}}}
-{"type":"function","function":{"name":"git_commit","description":"Stage and commit changes","parameters":{"type":"object","properties":{"message":{"type":"string","description":"Commit message"}},"required":["message"]}}}
-{"type":"function","function":{"name":"git_log","description":"Show recent commit history","parameters":{"type":"object","properties":{"count":{"type":"number","description":"Number of commits"}}}}}
-</tools>
+    if filtered.is_empty() {
+        return String::new();
+    }
 
-For each function call, return a json object with function name and arguments within <tool_call></tool_call> XML tags:
-<tool_call>
-{"name": "function_name", "arguments": {"arg1": "value1"}}
-</tool_call>
-"#;
+    let mut section = String::from("\n\n# Tools\n\nYou may call one or more functions to assist with the user query.\n\nYou are provided with function signatures within <tools></tools> XML tags:\n<tools>\n");
+    for t in &filtered {
+        section.push_str(t.json);
+        section.push('\n');
+    }
+    section.push_str("</tools>\n\nFor each function call, return a json object with function name and arguments within <tool_call></tool_call> XML tags:\n<tool_call>\n{\"name\": \"function_name\", \"arguments\": {\"arg1\": \"value1\"}}\n</tool_call>\n");
+    section
+}
 
-fn build_system_prompt(workspace: Option<&str>) -> String {
-    let mut prompt = SYSTEM_PROMPT_BASE.to_string();
+fn build_system_prompt(
+    workspace: Option<&str>,
+    custom_system_prompt: Option<&str>,
+    allowed_tools: Option<&[String]>,
+) -> String {
+    let base = custom_system_prompt.unwrap_or(SYSTEM_PROMPT_BASE);
+    let mut prompt = base.to_string();
     if let Some(ws) = workspace {
         prompt.push_str(&format!("\n\nYou are working in the project at: {ws}"));
-        prompt.push_str(TOOL_PROMPT_SECTION);
+        prompt.push_str(&build_tool_section(allowed_tools));
     }
     prompt
 }
@@ -633,20 +672,24 @@ fn build_prompt(
     model: &LlamaModel,
     messages: &[(String, String)],
     workspace: Option<&str>,
+    custom_system_prompt: Option<&str>,
+    allowed_tools: Option<&[String]>,
 ) -> String {
-    if let Ok(prompt) = build_prompt_native(model, messages, workspace) {
+    if let Ok(prompt) = build_prompt_native(model, messages, workspace, custom_system_prompt, allowed_tools) {
         return prompt;
     }
     log::warn!("Native chat template failed, falling back to ChatML");
-    build_prompt_chatml(messages, workspace)
+    build_prompt_chatml(messages, workspace, custom_system_prompt, allowed_tools)
 }
 
 fn build_prompt_native(
     model: &LlamaModel,
     messages: &[(String, String)],
     workspace: Option<&str>,
+    custom_system_prompt: Option<&str>,
+    allowed_tools: Option<&[String]>,
 ) -> Result<String, String> {
-    let system = build_system_prompt(workspace);
+    let system = build_system_prompt(workspace, custom_system_prompt, allowed_tools);
     let mut chat: Vec<LlamaChatMessage> = Vec::with_capacity(messages.len() + 1);
 
     chat.push(
@@ -670,8 +713,13 @@ fn build_prompt_native(
     Ok(prompt)
 }
 
-fn build_prompt_chatml(messages: &[(String, String)], workspace: Option<&str>) -> String {
-    let system = build_system_prompt(workspace);
+fn build_prompt_chatml(
+    messages: &[(String, String)],
+    workspace: Option<&str>,
+    custom_system_prompt: Option<&str>,
+    allowed_tools: Option<&[String]>,
+) -> String {
+    let system = build_system_prompt(workspace, custom_system_prompt, allowed_tools);
     let mut prompt = format!("<|im_start|>system\n{system}<|im_end|>\n");
     for (role, content) in messages {
         let r = if role == "tool" { "user" } else { role.as_str() };
@@ -698,8 +746,10 @@ fn run_inference(
     chat_id: &str,
     app_handle: &tauri::AppHandle,
     workspace: Option<&str>,
+    custom_system_prompt: Option<&str>,
+    allowed_tools: Option<&[String]>,
 ) -> Result<String, String> {
-    let prompt = build_prompt(model, messages, workspace);
+    let prompt = build_prompt(model, messages, workspace, custom_system_prompt, allowed_tools);
 
     let tokens = model
         .str_to_token(&prompt, AddBos::Always)

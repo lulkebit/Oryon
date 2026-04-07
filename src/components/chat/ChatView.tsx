@@ -7,6 +7,7 @@ import { useModelHubStore } from '@/stores/modelHubStore'
 import { useUiStore } from '@/stores/uiStore'
 import { MessageList } from './MessageList'
 import { ChatInput } from './ChatInput'
+import { AgentSelector } from './AgentSelector'
 
 export const ChatView = () => {
   const { activeChatId, chats } = useWorkspaceStore()
@@ -60,24 +61,32 @@ export const ChatView = () => {
           borderColor: 'var(--border-subtle)',
         }}
       >
-        <h1
-          style={{
-            fontSize: '14px',
-            fontWeight: 600,
-            color: 'var(--text-primary)',
-          }}
-        >
-          {activeChat.title}
-        </h1>
+        <div className="flex items-center" style={{ gap: '8px' }}>
+          <h1
+            style={{
+              fontSize: '14px',
+              fontWeight: 600,
+              color: 'var(--text-primary)',
+            }}
+          >
+            {activeChat.title}
+          </h1>
+        </div>
 
-        <ModelSelector
-          downloadedModels={downloadedModels}
-          loadedModel={loadedModel}
-          modelLoading={modelLoading}
-          onSelect={(path, id) => loadModelFromPath(path, id)}
-          onUnload={unloadModel}
-          onGoToHub={() => setActiveView('models')}
-        />
+        <div className="flex items-center" style={{ gap: '8px' }}>
+          <AgentSelector
+            chatId={activeChatId}
+            onOpenConfig={() => setActiveView('agents')}
+          />
+          <ModelSelector
+            downloadedModels={downloadedModels}
+            loadedModel={loadedModel}
+            modelLoading={modelLoading}
+            onSelect={(path, id) => loadModelFromPath(path, id)}
+            onUnload={unloadModel}
+            onGoToHub={() => setActiveView('models')}
+          />
+        </div>
       </div>
 
       {!loadedModel && !modelLoading && (
