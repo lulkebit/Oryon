@@ -444,7 +444,7 @@ function CategorySection({
       {category.loading && (
         <div
           className="flex"
-          style={{ gap: '12px', padding: '0 24px', overflow: 'hidden' }}
+          style={{ gap: '12px', paddingLeft: '24px', overflow: 'hidden' }}
         >
           {[0, 1, 2, 3].map((i) => (
             <div
@@ -468,11 +468,11 @@ function CategorySection({
           className="hide-scrollbar flex"
           style={{
             gap: '12px',
-            padding: '0 24px',
             overflowX: 'auto',
             scrollSnapType: 'x mandatory',
           }}
         >
+          <div style={{ minWidth: '24px', flexShrink: 0 }} />
           {category.results.map((model) => (
             <BrowseModelCard
               key={model.id}
@@ -481,6 +481,7 @@ function CategorySection({
               activeDownload={activeDownload}
             />
           ))}
+          <div style={{ minWidth: '12px', flexShrink: 0 }} />
         </div>
       )}
     </div>
