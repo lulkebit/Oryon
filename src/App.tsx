@@ -10,6 +10,7 @@ import { useWorkspaceStore } from '@/stores/workspaceStore'
 import { useEngineStore } from '@/stores/engineStore'
 import { useChatStore } from '@/stores/chatStore'
 import { useAgentStore } from '@/stores/agentStore'
+import { useSettingsStore } from '@/stores/settingsStore'
 
 export const App = () => {
   const { activeView, init } = useUiStore()
@@ -22,6 +23,7 @@ export const App = () => {
     initEngine()
     useChatStore.getState().setupListeners()
     useAgentStore.getState().loadAgents()
+    useSettingsStore.getState().load()
   }, [init, loadWorkspaces, initEngine])
 
   return (
