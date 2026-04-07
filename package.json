@@ -11,10 +11,13 @@
   },
   "dependencies": {
     "@tauri-apps/api": "^2.5.0",
+    "@tauri-apps/plugin-dialog": "^2.7.0",
     "iconsax-react": "^0.0.8",
     "react": "^19.1.0",
     "react-dom": "^19.1.0",
+    "react-markdown": "^10.1.0",
     "react-router-dom": "^7.5.0",
+    "remark-gfm": "^4.0.1",
     "zustand": "^5.0.3"
   },
   "devDependencies": {

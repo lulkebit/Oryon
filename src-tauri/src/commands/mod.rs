@@ -1,5 +1,13 @@
+mod chat;
+mod message;
+mod workspace;
+
 use crate::AppState;
 use tauri::State;
+
+pub use chat::*;
+pub use message::*;
+pub use workspace::*;
 
 #[tauri::command]
 pub fn get_app_info() -> serde_json::Value {
@@ -20,11 +28,24 @@ pub fn get_theme(state: State<'_, AppState>) -> Result<String, String> {
 }
 
 #[tauri::command]
-pub fn set_theme(
-    state: State<'_, AppState>,
-    theme: String,
-) -> Result<(), String> {
+pub fn set_theme(state: State<'_, AppState>, theme: String) -> Result<(), String> {
     let db = state.db.lock().map_err(|e| e.to_string())?;
     let value = serde_json::to_string(&theme).map_err(|e| e.to_string())?;
     db.set_setting("theme", &value).map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+pub fn get_setting(state: State<'_, AppState>, key: String) -> Result<Option<String>, String> {
+    let db = state.db.lock().map_err(|e| e.to_string())?;
+    db.get_setting(&key).map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+pub fn set_setting(
+    state: State<'_, AppState>,
+    key: String,
+    value: String,
+) -> Result<(), String> {
+    let db = state.db.lock().map_err(|e| e.to_string())?;
+    db.set_setting(&key, &value).map_err(|e| e.to_string())
 }

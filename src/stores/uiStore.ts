@@ -1,6 +1,11 @@
 import { create } from 'zustand'
 import type { ActiveView, Theme } from '@/lib/types'
-import { getTheme, setTheme as ipcSetTheme } from '@/lib/ipc'
+import {
+  getTheme,
+  setTheme as ipcSetTheme,
+  getSetting,
+  setSetting,
+} from '@/lib/ipc'
 
 interface UiState {
   theme: Theme
@@ -13,13 +18,15 @@ interface UiState {
   setSidebarWidth: (width: number) => void
   toggleSidebar: () => void
   setActiveView: (view: ActiveView) => void
-  initTheme: () => Promise<void>
+  init: () => Promise<void>
 }
 
 const SIDEBAR_MIN = 48
 const SIDEBAR_MAX = 400
 const SIDEBAR_DEFAULT = 260
 const SIDEBAR_COLLAPSE_THRESHOLD = 120
+
+let sidebarPersistTimer: ReturnType<typeof setTimeout> | null = null
 
 function resolveTheme(theme: Theme): 'dark' | 'light' {
   if (theme === 'system') {
@@ -51,29 +58,51 @@ export const useUiStore = create<UiState>((set, get) => ({
   setSidebarWidth: (width) => {
     const clamped = Math.max(SIDEBAR_MIN, Math.min(SIDEBAR_MAX, width))
     const collapsed = clamped <= SIDEBAR_COLLAPSE_THRESHOLD
-    set({
-      sidebarWidth: collapsed ? SIDEBAR_MIN : clamped,
-      sidebarCollapsed: collapsed,
-    })
+    const finalWidth = collapsed ? SIDEBAR_MIN : clamped
+    set({ sidebarWidth: finalWidth, sidebarCollapsed: collapsed })
+
+    if (sidebarPersistTimer) clearTimeout(sidebarPersistTimer)
+    sidebarPersistTimer = setTimeout(() => {
+      setSetting('sidebar_width', String(finalWidth)).catch(console.error)
+    }, 500)
   },
 
   toggleSidebar: () => {
     const { sidebarCollapsed } = get()
     if (sidebarCollapsed) {
       set({ sidebarWidth: SIDEBAR_DEFAULT, sidebarCollapsed: false })
+      setSetting('sidebar_width', String(SIDEBAR_DEFAULT)).catch(console.error)
     } else {
       set({ sidebarWidth: SIDEBAR_MIN, sidebarCollapsed: true })
+      setSetting('sidebar_width', String(SIDEBAR_MIN)).catch(console.error)
     }
   },
 
   setActiveView: (view) => set({ activeView: view }),
 
-  initTheme: async () => {
+  init: async () => {
     try {
-      const theme = await getTheme()
+      const [theme, savedWidth] = await Promise.all([
+        getTheme(),
+        getSetting('sidebar_width'),
+      ])
+
       const resolved = resolveTheme(theme)
       applyTheme(resolved)
-      set({ theme, resolvedTheme: resolved })
+
+      const width = savedWidth ? parseInt(savedWidth, 10) : SIDEBAR_DEFAULT
+      const validWidth =
+        isNaN(width) || width < SIDEBAR_MIN || width > SIDEBAR_MAX
+          ? SIDEBAR_DEFAULT
+          : width
+      const collapsed = validWidth <= SIDEBAR_COLLAPSE_THRESHOLD
+
+      set({
+        theme,
+        resolvedTheme: resolved,
+        sidebarWidth: collapsed ? SIDEBAR_MIN : validWidth,
+        sidebarCollapsed: collapsed,
+      })
     } catch {
       applyTheme('dark')
     }

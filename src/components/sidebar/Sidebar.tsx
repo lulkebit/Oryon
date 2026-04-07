@@ -1,10 +1,20 @@
-import { useCallback, useRef } from 'react'
+import { useCallback, useRef, useState } from 'react'
 import { Add, Box1, Setting2, FolderOpen } from 'iconsax-react'
 import { useUiStore } from '@/stores/uiStore'
 import { useWorkspaceStore } from '@/stores/workspaceStore'
 import { SidebarItem } from './SidebarItem'
+import {
+  ContextMenu,
+  type ContextMenuItem,
+} from '@/components/shared/ContextMenu'
 
 const RESIZE_HANDLE_WIDTH = 4
+
+interface ContextMenuState {
+  x: number
+  y: number
+  items: ContextMenuItem[]
+}
 
 export const Sidebar = () => {
   const {
@@ -14,8 +24,20 @@ export const Sidebar = () => {
     activeView,
     setActiveView,
   } = useUiStore()
-  const { workspaces, chats, activeChatId } = useWorkspaceStore()
+  const {
+    workspaces,
+    chats,
+    activeChatId,
+    addWorkspace,
+    addChat,
+    renameWorkspace,
+    removeWorkspace,
+    renameChat,
+    removeChat,
+    setActiveChat,
+  } = useWorkspaceStore()
   const resizing = useRef(false)
+  const [contextMenu, setContextMenu] = useState<ContextMenuState | null>(null)
 
   const handleResizeStart = useCallback(
     (e: React.MouseEvent) => {
@@ -51,6 +73,70 @@ export const Sidebar = () => {
     setSidebarWidth(260)
   }, [setSidebarWidth])
 
+  const handleNewChat = useCallback(() => {
+    const first = workspaces[0]
+    if (!first) return
+    addChat(first.id)
+    setActiveView('chat')
+  }, [workspaces, addChat, setActiveView])
+
+  const handleWorkspaceContext = useCallback(
+    (e: React.MouseEvent, workspaceId: string, name: string) => {
+      e.preventDefault()
+      setContextMenu({
+        x: e.clientX,
+        y: e.clientY,
+        items: [
+          {
+            label: 'New Chat',
+            onClick: () => {
+              addChat(workspaceId)
+              setActiveView('chat')
+            },
+          },
+          {
+            label: 'Rename',
+            onClick: () => {
+              const newName = window.prompt('Rename workspace', name)
+              if (newName?.trim()) renameWorkspace(workspaceId, newName.trim())
+            },
+          },
+          {
+            label: 'Remove',
+            variant: 'danger',
+            onClick: () => removeWorkspace(workspaceId),
+          },
+        ],
+      })
+    },
+    [addChat, setActiveView, renameWorkspace, removeWorkspace]
+  )
+
+  const handleChatContext = useCallback(
+    (e: React.MouseEvent, chatId: string, title: string) => {
+      e.preventDefault()
+      setContextMenu({
+        x: e.clientX,
+        y: e.clientY,
+        items: [
+          {
+            label: 'Rename',
+            onClick: () => {
+              const newTitle = window.prompt('Rename chat', title)
+              if (newTitle?.trim()) renameChat(chatId, newTitle.trim())
+            },
+          },
+          {
+            label: 'Delete',
+            variant: 'danger',
+            onClick: () => removeChat(chatId),
+          },
+        ],
+      })
+    },
+    [renameChat, removeChat]
+  )
+
   return (
     <aside
       className="relative flex shrink-0 flex-col border-r"
@@ -70,9 +156,10 @@ export const Sidebar = () => {
       >
         <SidebarButton
           icon={<Add size={18} color="currentColor" />}
-          label="New Agent"
+          label="New Chat"
           collapsed={sidebarCollapsed}
-          onClick={() => {}}
+          onClick={handleNewChat}
+          disabled={workspaces.length === 0}
           shortcut="⌘N"
         />
         <SidebarButton
@@ -81,9 +168,7 @@ export const Sidebar = () => {
           collapsed={sidebarCollapsed}
           active={activeView === 'model-hub'}
           onClick={() =>
-            setActiveView(
-              activeView === 'model-hub' ? 'chat' : 'model-hub'
-            )
+            setActiveView(activeView === 'model-hub' ? 'chat' : 'model-hub')
           }
         />
       </div>
@@ -91,10 +176,7 @@ export const Sidebar = () => {
       {/* Divider */}
       <div
         className="h-px"
-        style={{
-          background: 'var(--border-subtle)',
-          margin: '0 16px',
-        }}
+        style={{ background: 'var(--border-subtle)', margin: '0 16px' }}
       />
 
       {/* Workspace list */}
@@ -134,6 +216,7 @@ export const Sidebar = () => {
               onMouseLeave={(e) => {
                 e.currentTarget.style.background = 'var(--bg-elevated)'
               }}
+              onClick={addWorkspace}
             >
               <FolderOpen size={16} color="currentColor" />
               Open Workspace
@@ -149,6 +232,7 @@ export const Sidebar = () => {
             <div key={workspace.id} style={{ marginBottom: '12px' }}>
               {!sidebarCollapsed && (
                 <p
+                  className="select-none"
                   style={{
                     padding: '12px 12px 6px',
                     fontSize: '11px',
@@ -157,6 +241,9 @@ export const Sidebar = () => {
                     letterSpacing: '0.05em',
                     color: 'var(--text-muted)',
                   }}
+                  onContextMenu={(e) =>
+                    handleWorkspaceContext(e, workspace.id, workspace.name)
+                  }
                 >
                   {workspace.name}
                 </p>
@@ -168,9 +255,41 @@ export const Sidebar = () => {
                     label={chat.title}
                     active={chat.id === activeChatId}
                     collapsed={sidebarCollapsed}
-                    onClick={() => {}}
+                    onClick={() => {
+                      setActiveChat(chat.id)
+                      setActiveView('chat')
+                    }}
+                    onContextMenu={(e) =>
+                      handleChatContext(e, chat.id, chat.title)
+                    }
                   />
                 ))}
+                {workspaceChats.length === 0 && !sidebarCollapsed && (
+                  <button
+                    className="flex items-center transition-colors"
+                    style={{
+                      height: '32px',
+                      gap: '10px',
+                      padding: '0 12px',
+                      borderRadius: '6px',
+                      fontSize: '12px',
+                      color: 'var(--text-muted)',
+                    }}
+                    onMouseEnter={(e) => {
+                      e.currentTarget.style.background = 'var(--bg-elevated)'
+                    }}
+                    onMouseLeave={(e) => {
+                      e.currentTarget.style.background = 'transparent'
+                    }}
+                    onClick={() => {
+                      addChat(workspace.id)
+                      setActiveView('chat')
+                    }}
+                  >
+                    <Add size={14} color="currentColor" />
+                    New Chat
+                  </button>
+                )}
               </div>
             </div>
           )
@@ -180,20 +299,23 @@ export const Sidebar = () => {
       {/* Footer */}
       <div
         className="border-t"
-        style={{
-          borderColor: 'var(--border-subtle)',
-          padding: '12px 16px',
-        }}
+        style={{ borderColor: 'var(--border-subtle)', padding: '12px 16px' }}
       >
+        {workspaces.length > 0 && (
+          <SidebarButton
+            icon={<FolderOpen size={18} color="currentColor" />}
+            label="Add Workspace"
+            collapsed={sidebarCollapsed}
+            onClick={addWorkspace}
+          />
+        )}
         <SidebarButton
           icon={<Setting2 size={18} color="currentColor" />}
           label="Settings"
           collapsed={sidebarCollapsed}
           active={activeView === 'settings'}
           onClick={() =>
-            setActiveView(
-              activeView === 'settings' ? 'chat' : 'settings'
-            )
+            setActiveView(activeView === 'settings' ? 'chat' : 'settings')
           }
         />
       </div>
@@ -205,6 +327,16 @@ export const Sidebar = () => {
         onMouseDown={handleResizeStart}
         onDoubleClick={handleDoubleClickEdge}
       />
+
+      {/* Context menu */}
+      {contextMenu && (
+        <ContextMenu
+          x={contextMenu.x}
+          y={contextMenu.y}
+          items={contextMenu.items}
+          onClose={() => setContextMenu(null)}
+        />
+      )}
     </aside>
   )
 }
@@ -214,6 +346,7 @@ const SidebarButton = ({
   label,
   collapsed,
   active,
+  disabled,
   shortcut,
   onClick,
 }: {
@@ -221,11 +354,13 @@ const SidebarButton = ({
   label: string
   collapsed: boolean
   active?: boolean
+  disabled?: boolean
   shortcut?: string
   onClick: () => void
 }) => (
   <button
     onClick={onClick}
+    disabled={disabled}
     className="flex w-full items-center transition-colors"
     style={{
       height: '36px',
@@ -236,9 +371,11 @@ const SidebarButton = ({
       fontWeight: 500,
       color: active ? 'var(--text-primary)' : 'var(--text-secondary)',
       background: active ? 'var(--bg-overlay)' : 'transparent',
+      opacity: disabled ? 0.4 : 1,
     }}
     onMouseEnter={(e) => {
-      if (!active) e.currentTarget.style.background = 'var(--bg-elevated)'
+      if (!active && !disabled)
+        e.currentTarget.style.background = 'var(--bg-elevated)'
     }}
     onMouseLeave={(e) => {
       if (!active) e.currentTarget.style.background = 'transparent'

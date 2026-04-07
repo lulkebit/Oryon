@@ -22,3 +22,15 @@ export async function getAppInfo(): Promise<{
   const { invoke } = await import('@tauri-apps/api/core')
   return invoke('get_app_info')
 }
+
+export async function getSetting(key: string): Promise<string | null> {
+  if (!isTauri) return null
+  const { invoke } = await import('@tauri-apps/api/core')
+  return invoke('get_setting', { key })
+}
+
+export async function setSetting(key: string, value: string): Promise<void> {
+  if (!isTauri) return
+  const { invoke } = await import('@tauri-apps/api/core')
+  await invoke('set_setting', { key, value })
+}

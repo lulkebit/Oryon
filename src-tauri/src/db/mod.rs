@@ -1,8 +1,10 @@
 mod schema;
+pub mod types;
 
 use rusqlite::Connection;
 use std::path::Path;
 use thiserror::Error;
+use types::{Chat, Message, Workspace};
 
 #[derive(Error, Debug)]
 pub enum DbError {
@@ -61,6 +63,8 @@ impl Database {
         Ok(())
     }
 
+    // ── Settings ─────────────────────────────────────────
+
     pub fn get_setting(&self, key: &str) -> Result<Option<String>, DbError> {
         let mut stmt = self
             .conn
@@ -78,5 +82,176 @@ impl Database {
             [key, value],
         )?;
         Ok(())
+    }
+
+    // ── Workspaces ───────────────────────────────────────
+
+    pub fn list_workspaces(&self) -> Result<Vec<Workspace>, DbError> {
+        let mut stmt = self.conn.prepare(
+            "SELECT id, name, path, created_at, updated_at, last_opened, sort_order
+             FROM workspaces ORDER BY sort_order, name",
+        )?;
+        let rows = stmt.query_map([], |row| {
+            Ok(Workspace {
+                id: row.get(0)?,
+                name: row.get(1)?,
+                path: row.get(2)?,
+                created_at: row.get(3)?,
+                updated_at: row.get(4)?,
+                last_opened: row.get(5)?,
+                sort_order: row.get(6)?,
+            })
+        })?;
+        rows.collect::<Result<Vec<_>, _>>().map_err(Into::into)
+    }
+
+    pub fn create_workspace(&self, name: &str, path: &str) -> Result<Workspace, DbError> {
+        let id = uuid::Uuid::now_v7().to_string();
+        let now = chrono::Utc::now().to_rfc3339();
+        self.conn.execute(
+            "INSERT INTO workspaces (id, name, path, created_at, updated_at, last_opened, sort_order)
+             VALUES (?1, ?2, ?3, ?4, ?5, ?6, 0)",
+            rusqlite::params![id, name, path, now, now, now],
+        )?;
+        Ok(Workspace {
+            id,
+            name: name.to_string(),
+            path: path.to_string(),
+            created_at: now.clone(),
+            updated_at: now.clone(),
+            last_opened: Some(now),
+            sort_order: 0,
+        })
+    }
+
+    pub fn rename_workspace(&self, id: &str, name: &str) -> Result<(), DbError> {
+        let now = chrono::Utc::now().to_rfc3339();
+        self.conn.execute(
+            "UPDATE workspaces SET name = ?1, updated_at = ?2 WHERE id = ?3",
+            rusqlite::params![name, now, id],
+        )?;
+        Ok(())
+    }
+
+    pub fn delete_workspace(&self, id: &str) -> Result<(), DbError> {
+        self.conn
+            .execute("DELETE FROM workspaces WHERE id = ?1", [id])?;
+        Ok(())
+    }
+
+    // ── Chats ────────────────────────────────────────────
+
+    pub fn list_all_chats(&self) -> Result<Vec<Chat>, DbError> {
+        let mut stmt = self.conn.prepare(
+            "SELECT id, workspace_id, title, created_at, updated_at, is_archived
+             FROM chats WHERE is_archived = 0
+             ORDER BY updated_at DESC",
+        )?;
+        let rows = stmt.query_map([], |row| {
+            Ok(Chat {
+                id: row.get(0)?,
+                workspace_id: row.get(1)?,
+                title: row.get(2)?,
+                created_at: row.get(3)?,
+                updated_at: row.get(4)?,
+                is_archived: row.get::<_, i32>(5)? != 0,
+            })
+        })?;
+        rows.collect::<Result<Vec<_>, _>>().map_err(Into::into)
+    }
+
+    pub fn create_chat(&self, workspace_id: &str, title: &str) -> Result<Chat, DbError> {
+        let id = uuid::Uuid::now_v7().to_string();
+        let now = chrono::Utc::now().to_rfc3339();
+        self.conn.execute(
+            "INSERT INTO chats (id, workspace_id, title, created_at, updated_at)
+             VALUES (?1, ?2, ?3, ?4, ?5)",
+            rusqlite::params![id, workspace_id, title, now, now],
+        )?;
+        Ok(Chat {
+            id,
+            workspace_id: workspace_id.to_string(),
+            title: title.to_string(),
+            created_at: now.clone(),
+            updated_at: now,
+            is_archived: false,
+        })
+    }
+
+    pub fn rename_chat(&self, id: &str, title: &str) -> Result<(), DbError> {
+        let now = chrono::Utc::now().to_rfc3339();
+        self.conn.execute(
+            "UPDATE chats SET title = ?1, updated_at = ?2 WHERE id = ?3",
+            rusqlite::params![title, now, id],
+        )?;
+        Ok(())
+    }
+
+    pub fn delete_chat(&self, id: &str) -> Result<(), DbError> {
+        self.conn
+            .execute("DELETE FROM chats WHERE id = ?1", [id])?;
+        Ok(())
+    }
+
+    // ── Messages ─────────────────────────────────────────
+
+    pub fn list_messages(&self, chat_id: &str) -> Result<Vec<Message>, DbError> {
+        let mut stmt = self.conn.prepare(
+            "SELECT id, chat_id, agent_id, role, content, metadata, created_at, sort_order
+             FROM messages WHERE chat_id = ?1 ORDER BY sort_order",
+        )?;
+        let rows = stmt.query_map([chat_id], |row| {
+            Ok(Message {
+                id: row.get(0)?,
+                chat_id: row.get(1)?,
+                agent_id: row.get(2)?,
+                role: row.get(3)?,
+                content: row.get(4)?,
+                metadata: row.get(5)?,
+                created_at: row.get(6)?,
+                sort_order: row.get(7)?,
+            })
+        })?;
+        rows.collect::<Result<Vec<_>, _>>().map_err(Into::into)
+    }
+
+    pub fn create_message(
+        &self,
+        chat_id: &str,
+        role: &str,
+        content: &str,
+        agent_id: Option<&str>,
+        metadata: Option<&str>,
+    ) -> Result<Message, DbError> {
+        let id = uuid::Uuid::now_v7().to_string();
+        let now = chrono::Utc::now().to_rfc3339();
+
+        let sort_order: i32 = self.conn.query_row(
+            "SELECT COALESCE(MAX(sort_order), -1) + 1 FROM messages WHERE chat_id = ?1",
+            [chat_id],
+            |row| row.get(0),
+        )?;
+
+        self.conn.execute(
+            "INSERT INTO messages (id, chat_id, agent_id, role, content, metadata, created_at, sort_order)
+             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8)",
+            rusqlite::params![id, chat_id, agent_id, role, content, metadata, now, sort_order],
+        )?;
+
+        self.conn.execute(
+            "UPDATE chats SET updated_at = ?1 WHERE id = ?2",
+            [&now, chat_id],
+        )?;
+
+        Ok(Message {
+            id,
+            chat_id: chat_id.to_string(),
+            agent_id: agent_id.map(String::from),
+            role: role.to_string(),
+            content: content.to_string(),
+            metadata: metadata.map(String::from),
+            created_at: now,
+            sort_order,
+        })
     }
 }

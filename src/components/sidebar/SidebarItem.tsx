@@ -5,6 +5,7 @@ interface SidebarItemProps {
   active: boolean
   collapsed: boolean
   onClick: () => void
+  onContextMenu?: (e: React.MouseEvent) => void
   hasActivity?: boolean
 }
 
@@ -13,10 +14,12 @@ export const SidebarItem = ({
   active,
   collapsed,
   onClick,
+  onContextMenu,
   hasActivity,
 }: SidebarItemProps) => (
   <button
     onClick={onClick}
+    onContextMenu={onContextMenu}
     className="relative flex w-full items-center transition-colors"
     style={{
       height: '32px',
@@ -47,11 +50,7 @@ export const SidebarItem = ({
         }}
       />
     )}
-    <Message
-      size={16}
-      color="var(--text-muted)"
-      className="shrink-0"
-    />
+    <Message size={16} color="var(--text-muted)" className="shrink-0" />
     {!collapsed && (
       <span className="flex-1 truncate text-left">{label}</span>
     )}

@@ -181,6 +181,11 @@ label[for] {
   outline-offset: 2px;
 }
 
+textarea:focus-visible,
+input:focus-visible {
+  outline: none;
+}
+
 /* ── Scrollbar ─────────────────────────────────────────── */
 
 ::-webkit-scrollbar {

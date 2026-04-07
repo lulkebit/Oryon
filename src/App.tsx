@@ -5,13 +5,16 @@ import { ChatView } from '@/components/chat'
 import { ModelHubView } from '@/components/model-hub'
 import { SettingsView } from '@/components/settings'
 import { useUiStore } from '@/stores/uiStore'
+import { useWorkspaceStore } from '@/stores/workspaceStore'
 
 export const App = () => {
-  const { activeView, initTheme } = useUiStore()
+  const { activeView, init } = useUiStore()
+  const { loadWorkspaces } = useWorkspaceStore()
 
   useEffect(() => {
-    initTheme()
-  }, [initTheme])
+    init()
+    loadWorkspaces()
+  }, [init, loadWorkspaces])
 
   return (
     <div className="flex h-screen flex-col overflow-hidden">
