@@ -2,6 +2,7 @@ import { useEffect, useRef } from 'react'
 import { Cpu } from 'iconsax-react'
 import type { Message } from '@/lib/types'
 import { MessageBubble } from './MessageBubble'
+import { MarkdownContent } from './MarkdownContent'
 
 interface MessageListProps {
   messages: Message[]
@@ -84,16 +85,8 @@ export const MessageList = ({
                 </span>
               </div>
               {streamingContent ? (
-                <div
-                  style={{
-                    fontSize: '13px',
-                    lineHeight: '22px',
-                    color: 'var(--text-primary)',
-                    whiteSpace: 'pre-wrap',
-                    wordBreak: 'break-word',
-                  }}
-                >
-                  {streamingContent}
+                <div style={{ position: 'relative' }}>
+                  <MarkdownContent content={streamingContent} />
                   <span
                     className="inline-block animate-pulse"
                     style={{

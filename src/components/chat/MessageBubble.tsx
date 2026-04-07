@@ -1,5 +1,6 @@
 import { User, Cpu, InfoCircle } from 'iconsax-react'
 import type { MessageRole } from '@/lib/types'
+import { MarkdownContent } from './MarkdownContent'
 
 interface MessageBubbleProps {
   role: MessageRole
@@ -84,17 +85,21 @@ export const MessageBubble = ({
             })}
           </span>
         </div>
-        <div
-          style={{
-            fontSize: '13px',
-            lineHeight: '22px',
-            color: 'var(--text-primary)',
-            whiteSpace: 'pre-wrap',
-            wordBreak: 'break-word',
-          }}
-        >
-          {content}
-        </div>
+        {isUser ? (
+          <div
+            style={{
+              fontSize: '13px',
+              lineHeight: '22px',
+              color: 'var(--text-primary)',
+              whiteSpace: 'pre-wrap',
+              wordBreak: 'break-word',
+            }}
+          >
+            {content}
+          </div>
+        ) : (
+          <MarkdownContent content={content} />
+        )}
       </div>
     </div>
   )
