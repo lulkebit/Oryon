@@ -59,14 +59,26 @@ export const ModelHubView = () => {
 
   const searchTimeout = useRef<ReturnType<typeof setTimeout>>(undefined)
 
+  const listenersInit = useRef(false)
+
   useEffect(() => {
     loadDownloaded()
     loadFeatured()
-    const cleanup = initEventListeners()
+  }, [loadDownloaded, loadFeatured])
+
+  useEffect(() => {
+    if (listenersInit.current) return
+    listenersInit.current = true
+
+    let cleanup: (() => void) | undefined
+    initEventListeners().then((fn) => {
+      cleanup = fn
+    })
     return () => {
-      cleanup.then((fn) => fn())
+      cleanup?.()
+      listenersInit.current = false
     }
-  }, [loadDownloaded, loadFeatured, initEventListeners])
+  }, [initEventListeners])
 
   const handleQueryChange = useCallback(
     (value: string) => {

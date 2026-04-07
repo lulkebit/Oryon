@@ -76,14 +76,29 @@ enum Cmd {
     Status {
         resp: Resp<EngineStatus>,
     },
+    Shutdown,
 }
 
 // ── Engine handle (thread-safe, cloneable) ───────────
 
 pub struct Engine {
     tx: mpsc::Sender<Cmd>,
+    join_handle: std::sync::Mutex<Option<thread::JoinHandle<()>>>,
     pub cancel: Arc<AtomicBool>,
     pub generating: Arc<AtomicBool>,
+}
+
+impl Drop for Engine {
+    fn drop(&mut self) {
+        log::info!("Engine shutting down — unloading model and freeing resources");
+        self.cancel.store(true, Ordering::SeqCst);
+        let _ = self.tx.send(Cmd::Shutdown);
+        if let Ok(mut handle) = self.join_handle.lock() {
+            if let Some(h) = handle.take() {
+                let _ = h.join();
+            }
+        }
+    }
 }
 
 impl Engine {
@@ -95,13 +110,14 @@ impl Engine {
         let c = cancel.clone();
         let g = generating.clone();
 
-        thread::Builder::new()
+        let handle = thread::Builder::new()
             .name("inference-engine".into())
             .spawn(move || engine_loop(rx, c, g))
             .map_err(|e| format!("Failed to start engine thread: {e}"))?;
 
         Ok(Self {
             tx,
+            join_handle: std::sync::Mutex::new(Some(handle)),
             cancel,
             generating,
         })
@@ -273,8 +289,17 @@ fn engine_loop(rx: mpsc::Receiver<Cmd>, cancel: Arc<AtomicBool>, generating: Arc
                 })
                 .ok();
             }
+
+            Cmd::Shutdown => {
+                log::info!("Engine thread: dropping model and exiting");
+                loaded = None;
+                break;
+            }
         }
     }
+
+    drop(loaded);
+    log::info!("Engine thread: all resources freed");
 }
 
 // ── Prompt builder ───────────────────────────────────

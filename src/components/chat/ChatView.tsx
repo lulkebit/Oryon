@@ -18,7 +18,6 @@ export const ChatView = () => {
     loadMessages,
     sendMessage,
     clearMessages,
-    initEventListeners,
   } = useChatStore()
   const {
     loadedModel,
@@ -37,20 +36,13 @@ export const ChatView = () => {
   }, [loadDownloaded])
 
   useEffect(() => {
-    let cleanup: (() => void) | undefined
-    initEventListeners().then((fn) => {
-      cleanup = fn
-    })
-    return () => cleanup?.()
-  }, [initEventListeners])
-
-  useEffect(() => {
     if (activeChatId) {
       loadMessages(activeChatId)
     } else {
       clearMessages()
     }
-  }, [activeChatId, loadMessages, clearMessages])
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [activeChatId])
 
   if (!activeChatId || !activeChat) {
     return <EmptyState />

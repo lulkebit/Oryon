@@ -15,39 +15,56 @@ function deriveTitle(content: string): string {
 
 interface ChatState {
   messages: Message[]
+  activeChatId: string | null
+  streamingChatId: string | null
   isStreaming: boolean
   streamingContent: string
   loading: boolean
 
   loadMessages: (chatId: string) => Promise<void>
   sendMessage: (chatId: string, content: string) => Promise<void>
-  appendToken: (token: string) => void
+  appendToken: (chatId: string, token: string) => void
   finalizeStream: (chatId: string, content: string) => Promise<void>
-  handleStreamError: (error: string) => void
+  handleStreamError: (chatId: string, error: string) => void
   clearMessages: () => void
   initEventListeners: () => Promise<() => void>
 }
 
 export const useChatStore = create<ChatState>((set, get) => ({
   messages: [],
+  activeChatId: null,
+  streamingChatId: null,
   isStreaming: false,
   streamingContent: '',
   loading: false,
 
   loadMessages: async (chatId) => {
-    set({ loading: true, messages: [] })
+    set({ loading: true, messages: [], activeChatId: chatId })
+
+    const { streamingChatId } = get()
+    if (streamingChatId && streamingChatId !== chatId) {
+      set({ isStreaming: false, streamingContent: '' })
+    }
+
     try {
       const messages = await ipc.listMessages(chatId)
+
+      if (get().activeChatId !== chatId) return
       set({ messages, loading: false })
     } catch (err) {
       console.error('Failed to load messages:', err)
-      set({ loading: false })
+      if (get().activeChatId === chatId) {
+        set({ loading: false })
+      }
     }
   },
 
   sendMessage: async (chatId, content) => {
     try {
       const message = await ipc.createMessage(chatId, 'user', content)
+
+      if (get().activeChatId !== chatId) return
+
       set((s) => ({ messages: [...s.messages, message] }))
 
       const isFirstMessage = get().messages.length === 1
@@ -58,7 +75,11 @@ export const useChatStore = create<ChatState>((set, get) => ({
 
       const engine = useEngineStore.getState()
       if (engine.loadedModel) {
-        set({ isStreaming: true, streamingContent: '' })
+        set({
+          isStreaming: true,
+          streamingContent: '',
+          streamingChatId: chatId,
+        })
         engine.startInference(chatId)
       }
     } catch (err) {
@@ -66,11 +87,19 @@ export const useChatStore = create<ChatState>((set, get) => ({
     }
   },
 
-  appendToken: (token) => {
+  appendToken: (chatId, token) => {
+    const { streamingChatId, activeChatId } = get()
+    if (chatId !== streamingChatId) return
+    if (chatId !== activeChatId) return
     set((s) => ({ streamingContent: s.streamingContent + token }))
   },
 
   finalizeStream: async (chatId, content) => {
+    const { streamingChatId } = get()
+    if (chatId !== streamingChatId) return
+
+    set({ streamingChatId: null })
+
     if (!content.trim()) {
       set({ isStreaming: false, streamingContent: '' })
       useEngineStore.getState().setGenerating(false)
@@ -83,11 +112,16 @@ export const useChatStore = create<ChatState>((set, get) => ({
         'assistant',
         content.trim()
       )
-      set((s) => ({
-        messages: [...s.messages, message],
-        isStreaming: false,
-        streamingContent: '',
-      }))
+
+      if (get().activeChatId === chatId) {
+        set((s) => ({
+          messages: [...s.messages, message],
+          isStreaming: false,
+          streamingContent: '',
+        }))
+      } else {
+        set({ isStreaming: false, streamingContent: '' })
+      }
     } catch (err) {
       console.error('Failed to save assistant message:', err)
       set({ isStreaming: false, streamingContent: '' })
@@ -95,13 +129,22 @@ export const useChatStore = create<ChatState>((set, get) => ({
     useEngineStore.getState().setGenerating(false)
   },
 
-  handleStreamError: (error) => {
+  handleStreamError: (_chatId, error) => {
     console.error('Inference error:', error)
-    set({ isStreaming: false, streamingContent: '' })
+    set({
+      isStreaming: false,
+      streamingContent: '',
+      streamingChatId: null,
+    })
     useEngineStore.getState().setGenerating(false)
   },
 
-  clearMessages: () => set({ messages: [], loading: false }),
+  clearMessages: () =>
+    set({
+      messages: [],
+      loading: false,
+      activeChatId: null,
+    }),
 
   initEventListeners: async () => {
     if (!isTauri) return () => {}
@@ -110,10 +153,7 @@ export const useChatStore = create<ChatState>((set, get) => ({
     const unlisten1 = await listen<{ chatId: string; token: string }>(
       'chat:token',
       (event) => {
-        const activeChatId = useWorkspaceStore.getState().activeChatId
-        if (event.payload.chatId === activeChatId) {
-          get().appendToken(event.payload.token)
-        }
+        get().appendToken(event.payload.chatId, event.payload.token)
       }
     )
 
@@ -127,7 +167,10 @@ export const useChatStore = create<ChatState>((set, get) => ({
     const unlisten3 = await listen<{ chatId: string; error: string }>(
       'chat:error',
       (event) => {
-        get().handleStreamError(event.payload.error)
+        get().handleStreamError(
+          event.payload.chatId,
+          event.payload.error
+        )
       }
     )
 
