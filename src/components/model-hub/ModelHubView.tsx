@@ -1,4 +1,4 @@
-import { useEffect, useRef, useCallback } from 'react'
+import { useEffect, useRef, useCallback, useState, memo } from 'react'
 import {
   SearchNormal1,
   CloseCircle,
@@ -6,7 +6,9 @@ import {
   Trash,
   Cpu,
   ArrowDown2,
+  Heart,
   ArrowRight2,
+  ArrowLeft2,
 } from 'iconsax-react'
 import { useUiStore } from '@/stores/uiStore'
 import { useModelHubStore } from '@/stores/modelHubStore'
@@ -15,7 +17,7 @@ import { useEngineStore } from '@/stores/engineStore'
 import type { HfModelResult, GgufFile, StoredModel } from '@/lib/ipc/hub'
 
 function formatBytes(bytes: number): string {
-  if (bytes === 0) return '0 B'
+  if (bytes === 0) return '—'
   const units = ['B', 'KB', 'MB', 'GB', 'TB']
   const i = Math.floor(Math.log(bytes) / Math.log(1024))
   return `${(bytes / Math.pow(1024, i)).toFixed(i > 1 ? 1 : 0)} ${units[i]}`
@@ -34,6 +36,77 @@ function formatSpeed(bps: number): string {
   const i = Math.floor(Math.log(bps) / Math.log(1024))
   return `${(bps / Math.pow(1024, i)).toFixed(1)} ${units[i]}`
 }
+
+function modelDisplayName(id: string): string {
+  return id.split('/').pop() ?? id
+}
+
+const AUTHOR_COLORS = [
+  '#6366f1', '#8b5cf6', '#a855f7', '#d946ef',
+  '#ec4899', '#f43f5e', '#ef4444', '#f97316',
+  '#eab308', '#84cc16', '#22c55e', '#14b8a6',
+  '#06b6d4', '#0ea5e9', '#3b82f6', '#6366f1',
+]
+
+function authorColor(name: string): string {
+  let hash = 0
+  for (let i = 0; i < name.length; i++) {
+    hash = name.charCodeAt(i) + ((hash << 5) - hash)
+  }
+  return AUTHOR_COLORS[Math.abs(hash) % AUTHOR_COLORS.length]
+}
+
+function authorInitials(name: string): string {
+  if (!name) return '?'
+  const parts = name.split(/[-_\s]/)
+  if (parts.length >= 2) return (parts[0][0] + parts[1][0]).toUpperCase()
+  return name.slice(0, 2).toUpperCase()
+}
+
+const AuthorAvatar = memo(
+  ({ author, size = 24 }: { author: string; size?: number }) => {
+    const [imgError, setImgError] = useState(false)
+    const color = authorColor(author)
+    const initials = authorInitials(author)
+    const avatarUrl = `https://huggingface.co/${author}/resolve/main/avatar.png`
+
+    if (imgError || !author) {
+      return (
+        <div
+          className="flex shrink-0 items-center justify-center"
+          style={{
+            width: size,
+            height: size,
+            borderRadius: size > 28 ? '10px' : '6px',
+            background: `${color}20`,
+            color,
+            fontSize: size * 0.4,
+            fontWeight: 700,
+            letterSpacing: '-0.02em',
+          }}
+        >
+          {initials}
+        </div>
+      )
+    }
+
+    return (
+      <img
+        src={avatarUrl}
+        alt={author}
+        onError={() => setImgError(true)}
+        style={{
+          width: size,
+          height: size,
+          borderRadius: size > 28 ? '10px' : '6px',
+          objectFit: 'cover',
+          flexShrink: 0,
+        }}
+      />
+    )
+  }
+)
+AuthorAvatar.displayName = 'AuthorAvatar'
 
 export const ModelHubView = () => {
   const { setActiveView } = useUiStore()
@@ -80,7 +153,6 @@ export const ModelHubView = () => {
 
   return (
     <div className="flex h-full flex-col">
-      {/* Header */}
       <div
         className="flex items-center justify-between border-b"
         style={{
@@ -119,13 +191,9 @@ export const ModelHubView = () => {
         </button>
       </div>
 
-      {/* Tabs */}
       <div
         className="flex items-center border-b"
-        style={{
-          padding: '0 24px',
-          borderColor: 'var(--border-subtle)',
-        }}
+        style={{ padding: '0 24px', borderColor: 'var(--border-subtle)' }}
       >
         <TabButton
           active={tab === 'explore'}
@@ -135,7 +203,7 @@ export const ModelHubView = () => {
         <TabButton
           active={tab === 'downloaded'}
           onClick={() => setTab('downloaded')}
-          label={`Downloaded (${downloadedModels.length})`}
+          label={`My Models (${downloadedModels.length})`}
         />
       </div>
 
@@ -161,8 +229,6 @@ export const ModelHubView = () => {
   )
 }
 
-/* ─── Tabs ─────────────────────────────────────────── */
-
 function TabButton({
   active,
   onClick,
@@ -182,7 +248,7 @@ function TabButton({
         fontWeight: active ? 600 : 400,
         color: active ? 'var(--text-primary)' : 'var(--text-muted)',
         borderBottom: active
-          ? '2px solid var(--text-primary)'
+          ? '2px solid var(--accent)'
           : '2px solid transparent',
       }}
     >
@@ -191,7 +257,7 @@ function TabButton({
   )
 }
 
-/* ─── Explore (Browse + Search) ────────────────────── */
+/* ─── Explore ─────────────────────────────────────── */
 
 function ExploreTab({
   query,
@@ -226,25 +292,25 @@ function ExploreTab({
 }) {
   return (
     <div className="flex flex-1 flex-col overflow-hidden">
-      {/* Search bar */}
       <div style={{ padding: '16px 24px 0' }}>
         <div
-          className="flex items-center border"
+          className="flex items-center"
           style={{
             height: '40px',
             gap: '10px',
             padding: '0 14px',
-            borderRadius: '8px',
-            background: 'var(--bg-input)',
-            borderColor: 'var(--border-default)',
+            borderRadius: '10px',
+            background: 'var(--bg-elevated)',
+            border: '1px solid var(--border-subtle)',
+            transition: 'border-color 150ms',
           }}
         >
-          <SearchNormal1 size={18} color="var(--text-muted)" />
+          <SearchNormal1 size={16} color="var(--text-muted)" />
           <input
             type="text"
             value={query}
             onChange={(e) => onQueryChange(e.target.value)}
-            placeholder="Search GGUF models on Hugging Face..."
+            placeholder="Search GGUF models on Hugging Face…"
             className="flex-1 bg-transparent outline-none"
             style={{ fontSize: '13px', color: 'var(--text-primary)' }}
           />
@@ -267,9 +333,9 @@ function ExploreTab({
           style={{
             margin: '12px 24px 0',
             padding: '8px 12px',
-            borderRadius: '6px',
+            borderRadius: '8px',
             fontSize: '12px',
-            background: 'var(--status-error-bg, rgba(239,68,68,0.1))',
+            background: 'color-mix(in srgb, var(--status-error), transparent 90%)',
             color: 'var(--status-error)',
           }}
         >
@@ -278,13 +344,9 @@ function ExploreTab({
       )}
 
       {activeDownload && (
-        <DownloadBanner
-          download={activeDownload}
-          onCancel={onCancelDownload}
-        />
+        <DownloadBanner download={activeDownload} onCancel={onCancelDownload} />
       )}
 
-      {/* Search results overlay */}
       {isSearchActive ? (
         <SearchResults
           results={searchResults}
@@ -304,7 +366,7 @@ function ExploreTab({
   )
 }
 
-/* ─── Browse Grid (categories) ─────────────────────── */
+/* ─── Browse Grid ─────────────────────────────────── */
 
 function BrowseGrid({
   featured,
@@ -316,10 +378,7 @@ function BrowseGrid({
   activeDownload: { repoId: string; filename: string } | null
 }) {
   return (
-    <div
-      className="flex-1 overflow-y-auto"
-      style={{ padding: '20px 0 24px' }}
-    >
+    <div className="flex-1 overflow-y-auto" style={{ padding: '16px 0 32px' }}>
       {featured.map((cat) => (
         <CategorySection
           key={cat.id}
@@ -345,19 +404,23 @@ function CategorySection({
 
   if (category.results.length === 0 && !category.loading) return null
 
+  const scrollBy = (dir: number) => {
+    scrollRef.current?.scrollBy({ left: dir * 320, behavior: 'smooth' })
+  }
+
   return (
-    <div style={{ marginBottom: '24px' }}>
-      {/* Section header */}
+    <div style={{ marginBottom: '28px' }}>
       <div
         className="flex items-center justify-between"
-        style={{ padding: '0 24px', marginBottom: '4px' }}
+        style={{ padding: '0 24px', marginBottom: '10px' }}
       >
         <div>
           <h2
             style={{
-              fontSize: '14px',
+              fontSize: '15px',
               fontWeight: 600,
               color: 'var(--text-primary)',
+              letterSpacing: '-0.01em',
             }}
           >
             {category.label}
@@ -372,26 +435,24 @@ function CategorySection({
             {category.description}
           </p>
         </div>
-        <ArrowRight2
-          size={16}
-          color="var(--text-muted)"
-          style={{ flexShrink: 0 }}
-        />
+        <div className="flex items-center" style={{ gap: '4px' }}>
+          <ScrollButton direction="left" onClick={() => scrollBy(-1)} />
+          <ScrollButton direction="right" onClick={() => scrollBy(1)} />
+        </div>
       </div>
 
-      {/* Loading skeleton */}
       {category.loading && (
         <div
           className="flex"
-          style={{ gap: '12px', padding: '12px 24px', overflow: 'hidden' }}
+          style={{ gap: '12px', padding: '0 24px', overflow: 'hidden' }}
         >
-          {[0, 1, 2].map((i) => (
+          {[0, 1, 2, 3].map((i) => (
             <div
               key={i}
               className="animate-pulse"
               style={{
-                width: '280px',
-                height: '120px',
+                width: '300px',
+                height: '160px',
                 borderRadius: '12px',
                 background: 'var(--bg-elevated)',
                 flexShrink: 0,
@@ -401,14 +462,13 @@ function CategorySection({
         </div>
       )}
 
-      {/* Horizontal scroll of model cards */}
       {!category.loading && category.results.length > 0 && (
         <div
           ref={scrollRef}
           className="hide-scrollbar flex"
           style={{
             gap: '12px',
-            padding: '12px 24px',
+            padding: '0 24px',
             overflowX: 'auto',
             scrollSnapType: 'x mandatory',
           }}
@@ -427,6 +487,38 @@ function CategorySection({
   )
 }
 
+function ScrollButton({
+  direction,
+  onClick,
+}: {
+  direction: 'left' | 'right'
+  onClick: () => void
+}) {
+  const Icon = direction === 'left' ? ArrowLeft2 : ArrowRight2
+  return (
+    <button
+      onClick={onClick}
+      className="flex items-center justify-center transition-colors"
+      style={{
+        width: '28px',
+        height: '28px',
+        borderRadius: '6px',
+        color: 'var(--text-muted)',
+        background: 'var(--bg-elevated)',
+        border: '1px solid var(--border-subtle)',
+      }}
+      onMouseEnter={(e) => {
+        e.currentTarget.style.background = 'var(--bg-overlay)'
+      }}
+      onMouseLeave={(e) => {
+        e.currentTarget.style.background = 'var(--bg-elevated)'
+      }}
+    >
+      <Icon size={14} color="currentColor" />
+    </button>
+  )
+}
+
 function BrowseModelCard({
   model,
   onDownload,
@@ -436,8 +528,9 @@ function BrowseModelCard({
   onDownload: (repoId: string, filename: string) => void
   activeDownload: { repoId: string; filename: string } | null
 }) {
+  const [expanded, setExpanded] = useState(false)
   const isDownloadingFromThis = activeDownload?.repoId === model.id
-  const recommendedFile =
+  const recommended =
     model.files.find(
       (f) =>
         f.quantization === 'Q4_K_M' ||
@@ -447,112 +540,294 @@ function BrowseModelCard({
 
   return (
     <div
-      className="border"
+      className="flex flex-col border transition-colors"
       style={{
         width: '300px',
         flexShrink: 0,
-        padding: '14px 16px',
         borderRadius: '12px',
         borderColor: 'var(--border-subtle)',
         background: 'var(--bg-surface)',
         scrollSnapAlign: 'start',
-        display: 'flex',
-        flexDirection: 'column',
-        gap: '10px',
+        overflow: 'hidden',
       }}
     >
-      {/* Model info */}
-      <div>
-        <p
-          style={{
-            fontSize: '13px',
-            fontWeight: 600,
-            color: 'var(--text-primary)',
-            overflow: 'hidden',
-            textOverflow: 'ellipsis',
-            whiteSpace: 'nowrap',
-          }}
-          title={model.id}
-        >
-          {model.id.split('/').pop()}
-        </p>
+      <div style={{ padding: '14px 16px 0' }}>
+        <div className="flex items-start" style={{ gap: '10px' }}>
+          <AuthorAvatar author={model.author ?? ''} size={32} />
+          <div style={{ flex: 1, minWidth: 0 }}>
+            <p
+              style={{
+                fontSize: '13px',
+                fontWeight: 600,
+                color: 'var(--text-primary)',
+                overflow: 'hidden',
+                textOverflow: 'ellipsis',
+                whiteSpace: 'nowrap',
+                lineHeight: '18px',
+              }}
+              title={model.id}
+            >
+              {modelDisplayName(model.id)}
+            </p>
+            <p
+              style={{
+                fontSize: '11px',
+                color: 'var(--text-muted)',
+                overflow: 'hidden',
+                textOverflow: 'ellipsis',
+                whiteSpace: 'nowrap',
+                lineHeight: '16px',
+              }}
+            >
+              {model.author ?? 'Unknown'}
+            </p>
+          </div>
+        </div>
+
         <div
           className="flex items-center"
           style={{
-            gap: '8px',
-            marginTop: '4px',
+            gap: '12px',
+            marginTop: '10px',
             fontSize: '11px',
             color: 'var(--text-muted)',
           }}
         >
-          {model.author && (
-            <span style={{ opacity: 0.8 }}>{model.author}</span>
-          )}
-          <span className="flex items-center" style={{ gap: '2px' }}>
-            <ArrowDown2 size={10} color="currentColor" />
+          <span className="flex items-center" style={{ gap: '3px' }}>
+            <ArrowDown2 size={11} color="currentColor" />
             {formatNumber(model.downloads)}
           </span>
+          {(model.likes ?? 0) > 0 && (
+            <span className="flex items-center" style={{ gap: '3px' }}>
+              <Heart size={11} color="currentColor" />
+              {formatNumber(model.likes)}
+            </span>
+          )}
+          <span>{model.files.length} file{model.files.length !== 1 ? 's' : ''}</span>
         </div>
       </div>
 
-      {/* File chips — top 3 */}
-      <div className="flex flex-wrap" style={{ gap: '6px' }}>
-        {model.files.slice(0, 4).map((file) => (
-          <FileChip
-            key={file.filename}
-            file={file}
-            repoId={model.id}
-            onDownload={onDownload}
-            isDownloading={
-              isDownloadingFromThis &&
-              activeDownload?.filename === file.filename
-            }
-            disabled={!!activeDownload}
-            compact
-          />
-        ))}
-        {model.files.length > 4 && (
-          <span
-            style={{
-              fontSize: '10px',
-              color: 'var(--text-muted)',
-              padding: '3px 6px',
-              alignSelf: 'center',
-            }}
+      <div style={{ padding: '10px 16px' }}>
+        {!expanded ? (
+          <div className="flex" style={{ gap: '4px', flexWrap: 'wrap' }}>
+            {model.files.slice(0, 3).map((f) => (
+              <QuantTag key={f.filename} file={f} />
+            ))}
+            {model.files.length > 3 && (
+              <button
+                onClick={() => setExpanded(true)}
+                style={{
+                  fontSize: '10px',
+                  color: 'var(--accent)',
+                  background: 'none',
+                  border: 'none',
+                  padding: '2px 4px',
+                  fontWeight: 500,
+                }}
+              >
+                +{model.files.length - 3} more
+              </button>
+            )}
+          </div>
+        ) : (
+          <div
+            className="flex flex-col"
+            style={{ gap: '3px', maxHeight: '140px', overflowY: 'auto' }}
           >
-            +{model.files.length - 4}
-          </span>
+            {model.files.map((f) => (
+              <FileRow
+                key={f.filename}
+                file={f}
+                repoId={model.id}
+                onDownload={onDownload}
+                isDownloading={
+                  isDownloadingFromThis &&
+                  activeDownload?.filename === f.filename
+                }
+                disabled={!!activeDownload}
+              />
+            ))}
+          </div>
         )}
       </div>
 
-      {/* Quick-download recommended quant */}
-      {recommendedFile && (
-        <button
-          onClick={() => onDownload(model.id, recommendedFile.filename)}
-          disabled={!!activeDownload}
-          className="flex items-center justify-center transition-colors"
-          style={{
-            height: '32px',
-            borderRadius: '8px',
-            fontSize: '12px',
-            fontWeight: 500,
-            gap: '6px',
-            background: 'var(--accent)',
-            color: 'var(--text-inverse)',
-            opacity: activeDownload ? 0.5 : 1,
-          }}
-        >
-          <DocumentDownload size={14} color="currentColor" />
-          Download {recommendedFile.quantization ?? 'GGUF'}
-          {recommendedFile.size > 0 &&
-            ` (${formatBytes(recommendedFile.size)})`}
-        </button>
-      )}
+      <div
+        style={{
+          padding: '0 16px 14px',
+          marginTop: 'auto',
+        }}
+      >
+        {!expanded ? (
+          <div className="flex" style={{ gap: '6px' }}>
+            <button
+              onClick={() => setExpanded(true)}
+              className="flex flex-1 items-center justify-center transition-colors"
+              style={{
+                height: '32px',
+                borderRadius: '8px',
+                fontSize: '12px',
+                fontWeight: 500,
+                background: 'var(--bg-elevated)',
+                color: 'var(--text-secondary)',
+                border: '1px solid var(--border-subtle)',
+              }}
+              onMouseEnter={(e) => {
+                e.currentTarget.style.background = 'var(--bg-overlay)'
+              }}
+              onMouseLeave={(e) => {
+                e.currentTarget.style.background = 'var(--bg-elevated)'
+              }}
+            >
+              All files
+            </button>
+            {recommended && (
+              <button
+                onClick={() =>
+                  onDownload(model.id, recommended.filename)
+                }
+                disabled={!!activeDownload}
+                className="flex flex-1 items-center justify-center transition-colors"
+                style={{
+                  height: '32px',
+                  borderRadius: '8px',
+                  fontSize: '12px',
+                  fontWeight: 500,
+                  gap: '4px',
+                  background: 'var(--accent)',
+                  color: '#fff',
+                  opacity: activeDownload ? 0.5 : 1,
+                }}
+              >
+                <DocumentDownload size={13} color="currentColor" />
+                {recommended.quantization ?? 'GGUF'}
+                {recommended.size > 0 && ` · ${formatBytes(recommended.size)}`}
+              </button>
+            )}
+          </div>
+        ) : (
+          <button
+            onClick={() => setExpanded(false)}
+            className="flex w-full items-center justify-center transition-colors"
+            style={{
+              height: '32px',
+              borderRadius: '8px',
+              fontSize: '12px',
+              fontWeight: 500,
+              background: 'var(--bg-elevated)',
+              color: 'var(--text-secondary)',
+              border: '1px solid var(--border-subtle)',
+            }}
+            onMouseEnter={(e) => {
+              e.currentTarget.style.background = 'var(--bg-overlay)'
+            }}
+            onMouseLeave={(e) => {
+              e.currentTarget.style.background = 'var(--bg-elevated)'
+            }}
+          >
+            Collapse
+          </button>
+        )}
+      </div>
     </div>
   )
 }
 
-/* ─── Search Results ───────────────────────────────── */
+function QuantTag({ file }: { file: GgufFile }) {
+  return (
+    <span
+      style={{
+        display: 'inline-flex',
+        alignItems: 'center',
+        height: '20px',
+        padding: '0 6px',
+        borderRadius: '4px',
+        fontSize: '10px',
+        fontWeight: 600,
+        fontFamily: 'var(--font-mono)',
+        color: 'var(--text-secondary)',
+        background: 'var(--bg-elevated)',
+        letterSpacing: '0.02em',
+      }}
+    >
+      {file.quantization ?? 'GGUF'}
+      {file.size > 0 && (
+        <span style={{ marginLeft: '4px', fontWeight: 400, opacity: 0.6 }}>
+          {formatBytes(file.size)}
+        </span>
+      )}
+    </span>
+  )
+}
+
+function FileRow({
+  file,
+  repoId,
+  onDownload,
+  isDownloading,
+  disabled,
+}: {
+  file: GgufFile
+  repoId: string
+  onDownload: (repoId: string, filename: string) => void
+  isDownloading: boolean
+  disabled: boolean
+}) {
+  return (
+    <div
+      className="flex items-center justify-between"
+      style={{
+        height: '28px',
+        padding: '0 8px',
+        borderRadius: '6px',
+        background: isDownloading ? 'var(--accent-muted)' : 'transparent',
+      }}
+    >
+      <div className="flex items-center" style={{ gap: '6px', flex: 1, minWidth: 0 }}>
+        <span
+          style={{
+            fontSize: '11px',
+            fontWeight: 600,
+            fontFamily: 'var(--font-mono)',
+            color: 'var(--text-secondary)',
+          }}
+        >
+          {file.quantization ?? 'GGUF'}
+        </span>
+        {file.size > 0 && (
+          <span
+            style={{
+              fontSize: '10px',
+              color: 'var(--text-muted)',
+              fontFamily: 'var(--font-mono)',
+            }}
+          >
+            {formatBytes(file.size)}
+          </span>
+        )}
+      </div>
+      <button
+        onClick={() => onDownload(repoId, file.filename)}
+        disabled={disabled}
+        className="flex items-center transition-colors"
+        style={{
+          gap: '3px',
+          fontSize: '10px',
+          fontWeight: 500,
+          color: isDownloading ? 'var(--accent)' : 'var(--text-muted)',
+          background: 'none',
+          border: 'none',
+          padding: '2px 4px',
+          opacity: disabled && !isDownloading ? 0.4 : 1,
+        }}
+      >
+        <DocumentDownload size={11} color="currentColor" />
+        {isDownloading ? 'Downloading…' : 'Download'}
+      </button>
+    </div>
+  )
+}
+
+/* ─── Search Results ──────────────────────────────── */
 
 function SearchResults({
   results,
@@ -568,17 +843,31 @@ function SearchResults({
   activeDownload: { repoId: string; filename: string } | null
 }) {
   return (
-    <div
-      className="flex-1 overflow-y-auto"
-      style={{ padding: '16px 24px 24px' }}
-    >
+    <div className="flex-1 overflow-y-auto" style={{ padding: '16px 24px 24px' }}>
       {results.length === 0 && !searching && query && (
-        <p
-          className="py-8 text-center"
-          style={{ fontSize: '13px', color: 'var(--text-muted)' }}
+        <div
+          className="flex flex-col items-center justify-center"
+          style={{ padding: '48px 0' }}
         >
-          No GGUF models found for &ldquo;{query}&rdquo;
-        </p>
+          <SearchNormal1
+            size={32}
+            color="var(--text-muted)"
+            style={{ opacity: 0.3, marginBottom: '12px' }}
+          />
+          <p style={{ fontSize: '13px', color: 'var(--text-muted)' }}>
+            No GGUF models found for &ldquo;{query}&rdquo;
+          </p>
+          <p
+            style={{
+              fontSize: '12px',
+              color: 'var(--text-muted)',
+              opacity: 0.6,
+              marginTop: '4px',
+            }}
+          >
+            Try a different search term or browse the categories
+          </p>
+        </div>
       )}
 
       <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
@@ -604,138 +893,173 @@ function SearchModelCard({
   onDownload: (repoId: string, filename: string) => void
   activeDownload: { repoId: string; filename: string } | null
 }) {
+  const [expanded, setExpanded] = useState(false)
   const isDownloadingFromThis = activeDownload?.repoId === model.id
+  const recommended =
+    model.files.find(
+      (f) =>
+        f.quantization === 'Q4_K_M' ||
+        f.quantization === 'Q4_K_S' ||
+        f.quantization === 'Q5_K_M'
+    ) ?? model.files[0]
 
   return (
     <div
-      className="border"
+      className="border transition-colors"
       style={{
-        padding: '16px',
-        borderRadius: '10px',
+        borderRadius: '12px',
         borderColor: 'var(--border-subtle)',
         background: 'var(--bg-surface)',
+        overflow: 'hidden',
       }}
     >
-      <div
-        className="flex items-start justify-between"
-        style={{ marginBottom: '8px' }}
-      >
-        <div style={{ flex: 1, minWidth: 0 }}>
-          <p
-            style={{
-              fontSize: '13px',
-              fontWeight: 600,
-              color: 'var(--text-primary)',
-              overflow: 'hidden',
-              textOverflow: 'ellipsis',
-              whiteSpace: 'nowrap',
-            }}
-          >
-            {model.id}
-          </p>
-          <div
-            className="flex items-center"
-            style={{
-              gap: '12px',
-              marginTop: '4px',
-              fontSize: '12px',
-              color: 'var(--text-muted)',
-            }}
-          >
-            {model.author && <span>{model.author}</span>}
-            <span className="flex items-center" style={{ gap: '2px' }}>
-              <ArrowDown2 size={12} color="currentColor" />
-              {formatNumber(model.downloads)}
-            </span>
-            <span>{model.files.length} files</span>
+      <div style={{ padding: '14px 16px' }}>
+        <div className="flex items-start" style={{ gap: '12px' }}>
+          <AuthorAvatar author={model.author ?? ''} size={36} />
+          <div style={{ flex: 1, minWidth: 0 }}>
+            <p
+              style={{
+                fontSize: '14px',
+                fontWeight: 600,
+                color: 'var(--text-primary)',
+                overflow: 'hidden',
+                textOverflow: 'ellipsis',
+                whiteSpace: 'nowrap',
+              }}
+            >
+              {modelDisplayName(model.id)}
+            </p>
+            <div
+              className="flex items-center"
+              style={{
+                gap: '10px',
+                marginTop: '3px',
+                fontSize: '12px',
+                color: 'var(--text-muted)',
+              }}
+            >
+              <span>{model.author}</span>
+              <span className="flex items-center" style={{ gap: '3px' }}>
+                <ArrowDown2 size={11} color="currentColor" />
+                {formatNumber(model.downloads)}
+              </span>
+              {(model.likes ?? 0) > 0 && (
+                <span className="flex items-center" style={{ gap: '3px' }}>
+                  <Heart size={11} color="currentColor" />
+                  {formatNumber(model.likes)}
+                </span>
+              )}
+              <span>
+                {model.files.length} file{model.files.length !== 1 ? 's' : ''}
+              </span>
+            </div>
           </div>
-        </div>
-      </div>
 
-      <div
-        style={{
-          display: 'flex',
-          flexWrap: 'wrap',
-          gap: '6px',
-          marginTop: '10px',
-        }}
-      >
-        {model.files.slice(0, 8).map((file) => (
-          <FileChip
-            key={file.filename}
-            file={file}
-            repoId={model.id}
-            onDownload={onDownload}
-            isDownloading={
-              isDownloadingFromThis &&
-              activeDownload?.filename === file.filename
-            }
-            disabled={!!activeDownload}
-          />
-        ))}
-        {model.files.length > 8 && (
-          <span
-            style={{
-              fontSize: '11px',
-              color: 'var(--text-muted)',
-              padding: '4px 8px',
-            }}
-          >
-            +{model.files.length - 8} more
-          </span>
-        )}
+          {recommended && !expanded && (
+            <button
+              onClick={() => onDownload(model.id, recommended.filename)}
+              disabled={!!activeDownload}
+              className="flex shrink-0 items-center transition-colors"
+              style={{
+                height: '30px',
+                gap: '5px',
+                padding: '0 12px',
+                borderRadius: '8px',
+                fontSize: '12px',
+                fontWeight: 500,
+                background: 'var(--accent)',
+                color: '#fff',
+                opacity: activeDownload ? 0.5 : 1,
+              }}
+            >
+              <DocumentDownload size={13} color="currentColor" />
+              {recommended.quantization ?? 'GGUF'}
+            </button>
+          )}
+        </div>
+
+        <div
+          className="flex items-center"
+          style={{ gap: '4px', marginTop: '10px', flexWrap: 'wrap' }}
+        >
+          {model.files.slice(0, expanded ? undefined : 6).map((f) => (
+            <button
+              key={f.filename}
+              onClick={() => onDownload(model.id, f.filename)}
+              disabled={!!activeDownload}
+              className="flex items-center transition-colors"
+              style={{
+                gap: '4px',
+                height: '24px',
+                padding: '0 8px',
+                borderRadius: '5px',
+                fontSize: '11px',
+                fontFamily: 'var(--font-mono)',
+                fontWeight: 500,
+                color:
+                  isDownloadingFromThis &&
+                  activeDownload?.filename === f.filename
+                    ? 'var(--accent)'
+                    : 'var(--text-secondary)',
+                background:
+                  isDownloadingFromThis &&
+                  activeDownload?.filename === f.filename
+                    ? 'var(--accent-muted)'
+                    : 'var(--bg-elevated)',
+                border: '1px solid var(--border-subtle)',
+                opacity:
+                  activeDownload &&
+                  !(
+                    isDownloadingFromThis &&
+                    activeDownload?.filename === f.filename
+                  )
+                    ? 0.5
+                    : 1,
+              }}
+            >
+              <DocumentDownload size={10} color="currentColor" />
+              {f.quantization ?? 'GGUF'}
+              {f.size > 0 && (
+                <span style={{ opacity: 0.5 }}>{formatBytes(f.size)}</span>
+              )}
+            </button>
+          ))}
+          {!expanded && model.files.length > 6 && (
+            <button
+              onClick={() => setExpanded(true)}
+              style={{
+                fontSize: '11px',
+                color: 'var(--accent)',
+                background: 'none',
+                border: 'none',
+                padding: '0 4px',
+                fontWeight: 500,
+              }}
+            >
+              +{model.files.length - 6} more
+            </button>
+          )}
+          {expanded && model.files.length > 6 && (
+            <button
+              onClick={() => setExpanded(false)}
+              style={{
+                fontSize: '11px',
+                color: 'var(--text-muted)',
+                background: 'none',
+                border: 'none',
+                padding: '0 4px',
+              }}
+            >
+              Show less
+            </button>
+          )}
+        </div>
       </div>
     </div>
   )
 }
 
-/* ─── Shared Components ────────────────────────────── */
-
-function FileChip({
-  file,
-  repoId,
-  onDownload,
-  isDownloading,
-  disabled,
-  compact,
-}: {
-  file: GgufFile
-  repoId: string
-  onDownload: (repoId: string, filename: string) => void
-  isDownloading: boolean
-  disabled: boolean
-  compact?: boolean
-}) {
-  return (
-    <button
-      onClick={() => onDownload(repoId, file.filename)}
-      disabled={disabled}
-      className="flex items-center border transition-colors"
-      style={{
-        gap: compact ? '4px' : '6px',
-        padding: compact ? '3px 8px' : '4px 10px',
-        borderRadius: '6px',
-        fontSize: compact ? '10px' : '11px',
-        borderColor: isDownloading
-          ? 'var(--accent)'
-          : 'var(--border-default)',
-        background: isDownloading
-          ? 'var(--accent-muted)'
-          : 'var(--bg-elevated)',
-        color: 'var(--text-secondary)',
-        opacity: disabled && !isDownloading ? 0.5 : 1,
-      }}
-    >
-      <DocumentDownload size={compact ? 10 : 12} color="currentColor" />
-      <span style={{ fontWeight: 500 }}>
-        {file.quantization ?? file.filename.split('.')[0].slice(-8)}
-      </span>
-      {!compact && file.size > 0 && (
-        <span style={{ opacity: 0.6 }}>{formatBytes(file.size)}</span>
-      )}
-    </button>
-  )
-}
+/* ─── Shared ──────────────────────────────────────── */
 
 function Spinner() {
   return (
@@ -745,7 +1069,7 @@ function Spinner() {
         width: '14px',
         height: '14px',
         border: '2px solid var(--border-default)',
-        borderTopColor: 'var(--text-primary)',
+        borderTopColor: 'var(--accent)',
         borderRadius: '50%',
       }}
     />
@@ -778,7 +1102,7 @@ function DownloadBanner({
         padding: '12px 16px',
         borderRadius: '10px',
         background: 'var(--bg-elevated)',
-        border: '1px solid var(--border-subtle)',
+        border: '1px solid var(--accent)',
       }}
     >
       <div
@@ -845,7 +1169,7 @@ function DownloadBanner({
             width: `${percent}%`,
             borderRadius: '2px',
             background: 'var(--accent)',
-            transition: 'width 0.3s ease',
+            transition: 'width 300ms ease',
           }}
         />
       </div>
@@ -853,7 +1177,7 @@ function DownloadBanner({
   )
 }
 
-/* ─── Downloaded ───────────────────────────────────── */
+/* ─── Downloaded ──────────────────────────────────── */
 
 function DownloadedTab({
   models,
@@ -883,27 +1207,25 @@ function DownloadedTab({
             marginTop: '4px',
           }}
         >
-          Browse and download a model to get started
+          Browse and download a model from the Explore tab
         </p>
       </div>
     )
   }
 
   return (
-    <div
-      className="flex-1 overflow-y-auto"
-      style={{ padding: '16px 24px 24px' }}
-    >
-      <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+    <div className="flex-1 overflow-y-auto" style={{ padding: '16px 24px 24px' }}>
+      <div className="flex flex-col" style={{ gap: '8px' }}>
         {models.map((model) => {
           const isLoaded = loadedModel?.modelId === model.id
+          const author = model.hfRepoId?.split('/')[0] ?? ''
           return (
             <div
               key={model.id}
-              className="flex items-center border"
+              className="flex items-center border transition-colors"
               style={{
                 padding: '12px 16px',
-                borderRadius: '10px',
+                borderRadius: '12px',
                 gap: '12px',
                 borderColor: isLoaded
                   ? 'var(--accent)'
@@ -913,12 +1235,16 @@ function DownloadedTab({
                   : 'var(--bg-surface)',
               }}
             >
-              <Cpu
-                size={20}
-                color={
-                  isLoaded ? 'var(--accent)' : 'var(--text-muted)'
-                }
-              />
+              {author ? (
+                <AuthorAvatar author={author} size={32} />
+              ) : (
+                <Cpu
+                  size={20}
+                  color={
+                    isLoaded ? 'var(--accent)' : 'var(--text-muted)'
+                  }
+                />
+              )}
               <div style={{ flex: 1, minWidth: 0 }}>
                 <p
                   style={{
@@ -950,29 +1276,34 @@ function DownloadedTab({
                       loadModelFromPath(model.storagePath, model.id)
                     }
                     disabled={loading}
-                    className="flex items-center border transition-colors"
+                    className="flex items-center transition-colors"
                     style={{
                       gap: '6px',
-                      padding: '6px 12px',
-                      borderRadius: '6px',
+                      height: '30px',
+                      padding: '0 14px',
+                      borderRadius: '8px',
                       fontSize: '12px',
                       fontWeight: 500,
                       background: 'var(--accent)',
-                      color: 'var(--text-inverse)',
-                      borderColor: 'transparent',
+                      color: '#fff',
                       opacity: loading ? 0.5 : 1,
                     }}
                   >
-                    {loading ? 'Loading...' : 'Load'}
+                    {loading ? 'Loading…' : 'Load'}
                   </button>
                 )}
                 {isLoaded && (
                   <span
                     style={{
-                      padding: '6px 12px',
+                      padding: '0 14px',
+                      height: '30px',
+                      display: 'flex',
+                      alignItems: 'center',
+                      borderRadius: '8px',
                       fontSize: '12px',
                       fontWeight: 500,
                       color: 'var(--accent)',
+                      background: 'var(--accent-muted)',
                     }}
                   >
                     Active
@@ -982,9 +1313,9 @@ function DownloadedTab({
                   onClick={() => onDelete(model.id)}
                   className="flex items-center justify-center transition-colors"
                   style={{
-                    width: '28px',
-                    height: '28px',
-                    borderRadius: '6px',
+                    width: '30px',
+                    height: '30px',
+                    borderRadius: '8px',
                     color: 'var(--text-muted)',
                   }}
                   onMouseEnter={(e) => {
