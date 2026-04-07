@@ -1,5 +1,4 @@
 import { useEffect, useRef } from 'react'
-import { Cpu } from 'iconsax-react'
 import type { Message } from '@/lib/types'
 import type { ActiveToolCall } from '@/stores/chatStore'
 import { MessageBubble } from './MessageBubble'
@@ -30,24 +29,26 @@ export const MessageList = ({
   if (loading) {
     return (
       <div className="flex flex-1 items-center justify-center">
-        <div className="flex flex-col items-center" style={{ gap: '12px' }}>
-          <div className="flex items-center" style={{ gap: '6px' }}>
-            {[0, 1, 2].map((i) => (
-              <div
-                key={i}
-                className="animate-pulse rounded-full"
-                style={{
-                  width: '6px',
-                  height: '6px',
-                  background: 'var(--text-muted)',
-                  animationDelay: `${i * 150}ms`,
-                }}
-              />
-            ))}
-          </div>
-          <p style={{ fontSize: '12px', color: 'var(--text-muted)' }}>
-            Loading messages...
-          </p>
+        <div className="flex items-center" style={{ gap: '6px' }}>
+          {[0, 1, 2].map((i) => (
+            <div
+              key={i}
+              className="rounded-full"
+              style={{
+                width: '5px',
+                height: '5px',
+                background: 'var(--text-muted)',
+                animation: 'bounce-dot 1.2s ease-in-out infinite',
+                animationDelay: `${i * 200}ms`,
+              }}
+            />
+          ))}
+          <style>{`
+            @keyframes bounce-dot {
+              0%, 80%, 100% { transform: translateY(0); opacity: 0.4; }
+              40% { transform: translateY(-4px); opacity: 1; }
+            }
+          `}</style>
         </div>
       </div>
     )
@@ -71,61 +72,32 @@ export const MessageList = ({
             key={message.id}
             role={message.role}
             content={message.content}
-            timestamp={message.createdAt}
           />
         ))}
 
         {isStreaming && (
-          <div className="flex" style={{ gap: '12px', padding: '16px 0' }}>
-            <div
-              className="flex shrink-0 items-center justify-center"
-              style={{
-                width: '28px',
-                height: '28px',
-                borderRadius: '8px',
-                background: 'var(--accent-muted)',
-              }}
-            >
-              <Cpu size={16} color="var(--accent)" />
-            </div>
-            <div className="flex-1" style={{ minWidth: 0 }}>
-              <div
-                className="flex items-center"
-                style={{ gap: '8px', marginBottom: '4px' }}
-              >
+          <div style={{ padding: '14px 0' }}>
+            {activeToolCalls.map((tc) => (
+              <ToolCallBubble key={tc.round} toolCall={tc} />
+            ))}
+
+            {streamingContent ? (
+              <div style={{ maxWidth: '95%' }}>
+                <MarkdownContent content={streamingContent} />
                 <span
+                  className="inline-block animate-pulse"
                   style={{
-                    fontSize: '13px',
-                    fontWeight: 600,
-                    color: 'var(--text-primary)',
+                    width: '2px',
+                    height: '14px',
+                    marginLeft: '1px',
+                    verticalAlign: 'text-bottom',
+                    background: 'var(--accent)',
                   }}
-                >
-                  Agent
-                </span>
+                />
               </div>
-
-              {activeToolCalls.map((tc) => (
-                <ToolCallBubble key={tc.round} toolCall={tc} />
-              ))}
-
-              {streamingContent ? (
-                <div style={{ position: 'relative' }}>
-                  <MarkdownContent content={streamingContent} />
-                  <span
-                    className="inline-block animate-pulse"
-                    style={{
-                      width: '2px',
-                      height: '14px',
-                      marginLeft: '1px',
-                      verticalAlign: 'text-bottom',
-                      background: 'var(--accent)',
-                    }}
-                  />
-                </div>
-              ) : activeToolCalls.length === 0 ? (
-                <ThinkingIndicator />
-              ) : null}
-            </div>
+            ) : activeToolCalls.length === 0 ? (
+              <ThinkingIndicator />
+            ) : null}
           </div>
         )}
 

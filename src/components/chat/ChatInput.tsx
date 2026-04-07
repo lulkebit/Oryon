@@ -107,6 +107,7 @@ export const ChatInput = ({
 
   return (
     <div style={{ padding: '8px 24px 20px' }}>
+      <div style={{ maxWidth: '768px', margin: '0 auto' }}>
       {attachments.length > 0 && (
         <div
           className="flex flex-wrap"
@@ -242,6 +243,7 @@ export const ChatInput = ({
             <Send2 size={16} color="currentColor" />
           </button>
         )}
+      </div>
       </div>
     </div>
   )
