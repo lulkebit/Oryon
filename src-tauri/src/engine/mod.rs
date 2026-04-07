@@ -685,19 +685,27 @@ fn run_inference(
     };
 
     let mut batch = LlamaBatch::new(BATCH_SIZE, 1);
-    let last_idx = tokens.len() - 1;
-    for (i, &tok) in tokens.iter().enumerate() {
-        batch
-            .add(tok, i as i32, &[0], i == last_idx)
-            .map_err(|e| format!("Batch error: {e}"))?;
-    }
 
-    ctx.decode(&mut batch)
-        .map_err(|e| format!("Prompt decode failed: {e}"))?;
+    for chunk_start in (0..tokens.len()).step_by(BATCH_SIZE) {
+        batch.clear();
+        let chunk_end = (chunk_start + BATCH_SIZE).min(tokens.len());
+        let is_last_chunk = chunk_end == tokens.len();
+
+        for (i, &tok) in tokens[chunk_start..chunk_end].iter().enumerate() {
+            let pos = (chunk_start + i) as i32;
+            let logits = is_last_chunk && (chunk_start + i == tokens.len() - 1);
+            batch
+                .add(tok, pos, &[0], logits)
+                .map_err(|e| format!("Batch error: {e}"))?;
+        }
+
+        ctx.decode(&mut batch)
+            .map_err(|e| format!("Prompt decode failed: {e}"))?;
+    }
 
     let mut output = String::new();
     let mut decoder = encoding_rs::UTF_8.new_decoder();
-    let mut n_cur = batch.n_tokens();
+    let mut n_cur = tokens.len() as i32;
     let n_max = n_prompt + params.max_tokens;
     let mut in_tool_call = false;
 
