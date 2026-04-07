@@ -150,6 +150,24 @@ const COMPONENTS: ComponentProps<typeof ReactMarkdown>['components'] = {
     )
   },
 
+  blockquote({ children }) {
+    return (
+      <div
+        style={{
+          margin: '8px 0',
+          padding: '8px 12px',
+          borderRadius: '8px',
+          background: 'var(--bg-base)',
+          border: '1px solid var(--border-subtle)',
+          fontSize: '12px',
+          lineHeight: '18px',
+        }}
+      >
+        {children}
+      </div>
+    )
+  },
+
   a({ href, children }) {
     return (
       <a

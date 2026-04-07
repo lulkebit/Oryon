@@ -312,6 +312,41 @@ fn truncate_tool_output(output: &str) -> String {
     truncated
 }
 
+fn truncate_tool_output_preview(output: &str, max: usize) -> String {
+    let trimmed = output.trim();
+    if trimmed.len() <= max {
+        return trimmed.to_string();
+    }
+    let mut t = trimmed[..max].to_string();
+    t.push_str("\n...");
+    t
+}
+
+fn format_tool_args_summary(call: &crate::tools::ToolCall) -> String {
+    if let Some(obj) = call.args.as_object() {
+        let parts: Vec<String> = obj
+            .iter()
+            .take(3)
+            .map(|(k, v)| {
+                let val = match v {
+                    serde_json::Value::String(s) => {
+                        if s.len() > 40 {
+                            format!("{}…", &s[..37])
+                        } else {
+                            s.clone()
+                        }
+                    }
+                    other => other.to_string(),
+                };
+                format!("`{k}: {val}`")
+            })
+            .collect();
+        parts.join(" ")
+    } else {
+        String::new()
+    }
+}
+
 fn strip_tool_call_markup(s: &str) -> String {
     let mut result = s.to_string();
     if let Some(start) = result.find("<tool_call>") {
@@ -387,6 +422,17 @@ fn run_agentic_loop(
                         );
 
                         let tool_output = truncate_tool_output(&result.output);
+
+                        let arg_summary = format_tool_args_summary(&tool_call);
+                        let status = if result.success { "✓" } else { "✗" };
+                        let duration = format!("{:.1}s", result.duration_ms as f64 / 1000.0);
+                        let output_preview = truncate_tool_output_preview(&result.output, 800);
+
+                        total_output.push_str(&format!(
+                            "\n\n> {status} **{}** {arg_summary} · {duration}\n>\n> ```\n> {}\n> ```\n\n",
+                            tool_call.name,
+                            output_preview.replace('\n', "\n> "),
+                        ));
 
                         messages.push((
                             "assistant".to_string(),
