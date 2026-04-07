@@ -17,7 +17,7 @@ export const SidebarItem = ({
 }: SidebarItemProps) => (
   <button
     onClick={onClick}
-    className="relative flex w-full items-center gap-2 rounded-md px-2.5 py-1 text-xs transition-colors"
+    className="relative flex w-full items-center gap-2.5 rounded-md px-2.5 py-1.5 text-[13px] transition-colors"
     style={{
       color: active ? 'var(--text-primary)' : 'var(--text-secondary)',
       background: active ? 'var(--bg-overlay)' : 'transparent',
@@ -38,7 +38,7 @@ export const SidebarItem = ({
       />
     )}
     <Message
-      size={14}
+      size={15}
       color="var(--text-muted)"
       className="shrink-0"
     />

@@ -2,29 +2,30 @@ import { MessageText1 } from 'iconsax-react'
 
 export const ChatView = () => {
   return (
-    <div className="flex h-full flex-col items-center justify-center">
-      <div className="flex flex-col items-center gap-4">
+    <div className="flex h-full flex-col items-center justify-center px-8">
+      <div className="flex flex-col items-center gap-5">
         <MessageText1
-          size={48}
+          size={52}
           color="var(--text-muted)"
           variant="Broken"
         />
         <div className="text-center">
           <h2
-            className="text-lg font-semibold"
+            className="text-[17px] font-semibold leading-6"
             style={{ color: 'var(--text-primary)' }}
           >
             Start a new chat
           </h2>
           <p
-            className="mt-1 text-sm"
+            className="mt-2 max-w-xs text-[13px] leading-5"
             style={{ color: 'var(--text-secondary)' }}
           >
-            Select a workspace and create a new agent chat to get started.
+            Select a workspace and create a new agent chat
+            to get started.
           </p>
         </div>
         <button
-          className="mt-2 inline-flex items-center gap-2 rounded-md px-4 py-2 text-sm font-medium transition-colors"
+          className="mt-1 inline-flex items-center gap-2 rounded-lg px-5 py-2.5 text-[13px] font-medium transition-colors"
           style={{
             background: 'var(--accent)',
             color: 'var(--text-inverse)',

@@ -64,16 +64,16 @@ export const Sidebar = () => {
       }}
     >
       {/* Header buttons */}
-      <div className="flex flex-col gap-1 p-3">
+      <div className="flex flex-col gap-1 px-3 pb-2 pt-3">
         <SidebarButton
-          icon={<Add size={16} color="currentColor" />}
+          icon={<Add size={18} color="currentColor" />}
           label="New Agent"
           collapsed={sidebarCollapsed}
           onClick={() => {}}
           shortcut="⌘N"
         />
         <SidebarButton
-          icon={<Box1 size={16} color="currentColor" />}
+          icon={<Box1 size={18} color="currentColor" />}
           label="Model Hub"
           collapsed={sidebarCollapsed}
           active={activeView === 'model-hub'}
@@ -85,21 +85,33 @@ export const Sidebar = () => {
         />
       </div>
 
+      {/* Divider */}
+      <div
+        className="mx-3 border-b"
+        style={{ borderColor: 'var(--border-subtle)' }}
+      />
+
       {/* Workspace list */}
-      <div className="flex-1 overflow-y-auto px-2 pb-2">
+      <div className="flex-1 overflow-y-auto px-3 pt-2 pb-3">
         {workspaces.length === 0 && !sidebarCollapsed && (
-          <div className="px-2 py-8 text-center">
+          <div className="flex flex-col items-center gap-3 px-2 py-10">
             <p
-              className="mb-3 text-xs"
+              className="text-xs"
               style={{ color: 'var(--text-muted)' }}
             >
               No workspaces yet
             </p>
             <button
-              className="inline-flex items-center gap-1.5 rounded-md px-3 py-1.5 text-xs font-medium transition-colors"
+              className="inline-flex items-center gap-2 rounded-md px-3 py-2 text-xs font-medium transition-colors"
               style={{
                 color: 'var(--text-secondary)',
                 background: 'var(--bg-elevated)',
+              }}
+              onMouseEnter={(e) => {
+                e.currentTarget.style.background = 'var(--bg-overlay)'
+              }}
+              onMouseLeave={(e) => {
+                e.currentTarget.style.background = 'var(--bg-elevated)'
               }}
             >
               <FolderOpen size={14} color="currentColor" />
@@ -113,24 +125,26 @@ export const Sidebar = () => {
             (c) => c.workspaceId === workspace.id
           )
           return (
-            <div key={workspace.id} className="mb-2">
+            <div key={workspace.id} className="mb-3">
               {!sidebarCollapsed && (
                 <p
-                  className="px-2 pb-1 pt-3 text-[11px] font-medium uppercase tracking-wider"
+                  className="mb-1 px-2 pt-3 text-[11px] font-medium uppercase tracking-wider"
                   style={{ color: 'var(--text-muted)' }}
                 >
                   {workspace.name}
                 </p>
               )}
-              {workspaceChats.map((chat) => (
-                <SidebarItem
-                  key={chat.id}
-                  label={chat.title}
-                  active={chat.id === activeChatId}
-                  collapsed={sidebarCollapsed}
-                  onClick={() => {}}
-                />
-              ))}
+              <div className="flex flex-col gap-0.5">
+                {workspaceChats.map((chat) => (
+                  <SidebarItem
+                    key={chat.id}
+                    label={chat.title}
+                    active={chat.id === activeChatId}
+                    collapsed={sidebarCollapsed}
+                    onClick={() => {}}
+                  />
+                ))}
+              </div>
             </div>
           )
         })}
@@ -138,11 +152,11 @@ export const Sidebar = () => {
 
       {/* Footer */}
       <div
-        className="border-t p-2"
+        className="border-t px-3 py-3"
         style={{ borderColor: 'var(--border-subtle)' }}
       >
         <SidebarButton
-          icon={<Setting2 size={16} color="currentColor" />}
+          icon={<Setting2 size={18} color="currentColor" />}
           label="Settings"
           collapsed={sidebarCollapsed}
           active={activeView === 'settings'}
@@ -182,7 +196,7 @@ const SidebarButton = ({
 }) => (
   <button
     onClick={onClick}
-    className="flex w-full items-center gap-2.5 rounded-md px-2.5 py-1.5 text-xs font-medium transition-colors"
+    className="flex w-full items-center gap-3 rounded-md px-2.5 py-2 text-[13px] font-medium transition-colors"
     style={{
       color: active ? 'var(--text-primary)' : 'var(--text-secondary)',
       background: active ? 'var(--bg-overlay)' : 'transparent',
@@ -202,7 +216,7 @@ const SidebarButton = ({
         <span className="flex-1 text-left">{label}</span>
         {shortcut && (
           <kbd
-            className="text-[10px]"
+            className="text-[10px] font-normal"
             style={{ color: 'var(--text-muted)' }}
           >
             {shortcut}

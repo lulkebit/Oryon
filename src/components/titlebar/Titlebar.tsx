@@ -1,45 +1,88 @@
-import { useCallback } from 'react'
+import { useCallback, useState, useEffect } from 'react'
 import { getCurrentWindow } from '@tauri-apps/api/window'
-import { Minus, Stop, CloseSquare } from 'iconsax-react'
 
 const appWindow = getCurrentWindow()
 
 export const Titlebar = () => {
+  const [isMaximized, setIsMaximized] = useState(false)
+  const [hovered, setHovered] = useState<string | null>(null)
+
+  useEffect(() => {
+    appWindow.isMaximized().then(setIsMaximized)
+    const unlisten = appWindow.onResized(() => {
+      appWindow.isMaximized().then(setIsMaximized)
+    })
+    return () => {
+      unlisten.then((fn) => fn())
+    }
+  }, [])
+
   const handleMinimize = useCallback(() => {
     appWindow.minimize()
   }, [])
 
-  const handleMaximize = useCallback(async () => {
-    const maximized = await appWindow.isMaximized()
-    if (maximized) {
+  const handleMaximize = useCallback(() => {
+    if (isMaximized) {
       appWindow.unmaximize()
     } else {
       appWindow.maximize()
     }
-  }, [])
+  }, [isMaximized])
 
   const handleClose = useCallback(() => {
     appWindow.close()
   }, [])
 
-  const handleDrag = useCallback((e: React.MouseEvent) => {
-    if (e.detail === 2) {
-      handleMaximize()
-      return
-    }
-    appWindow.startDragging()
-  }, [handleMaximize])
+  const handleDrag = useCallback(
+    (e: React.MouseEvent) => {
+      if (e.detail === 2) {
+        handleMaximize()
+        return
+      }
+      appWindow.startDragging()
+    },
+    [handleMaximize]
+  )
 
   return (
     <header
-      className="flex h-10 shrink-0 items-center border-b select-none"
+      className="flex h-11 shrink-0 items-center border-b select-none"
       style={{
         background: 'var(--bg-surface)',
         borderColor: 'var(--border-subtle)',
       }}
     >
-      {/* macOS traffic light spacing */}
-      <div className="w-[78px] shrink-0" />
+      {/* Traffic lights */}
+      <div
+        className="flex items-center gap-2 pl-4 pr-3"
+        onMouseEnter={() => setHovered('group')}
+        onMouseLeave={() => setHovered(null)}
+      >
+        <TrafficLight
+          color="#FF5F57"
+          hoverColor="#FF3B30"
+          onClick={handleClose}
+          aria-label="Close"
+          showIcon={hovered === 'group'}
+          icon="close"
+        />
+        <TrafficLight
+          color="#FDBC40"
+          hoverColor="#F5A623"
+          onClick={handleMinimize}
+          aria-label="Minimize"
+          showIcon={hovered === 'group'}
+          icon="minimize"
+        />
+        <TrafficLight
+          color="#33C748"
+          hoverColor="#2DB83D"
+          onClick={handleMaximize}
+          aria-label={isMaximized ? 'Restore' : 'Maximize'}
+          showIcon={hovered === 'group'}
+          icon="maximize"
+        />
+      </div>
 
       {/* Draggable title area */}
       <div
@@ -54,33 +97,58 @@ export const Titlebar = () => {
         </span>
       </div>
 
-      {/* Window controls (hidden on macOS, shown on Windows/Linux) */}
-      <div className="hidden items-center">
-        <button
-          onClick={handleMinimize}
-          className="flex h-10 w-11 items-center justify-center transition-colors"
-          style={{ color: 'var(--text-secondary)' }}
-          aria-label="Minimize"
-        >
-          <Minus size={14} color="currentColor" />
-        </button>
-        <button
-          onClick={handleMaximize}
-          className="flex h-10 w-11 items-center justify-center transition-colors"
-          style={{ color: 'var(--text-secondary)' }}
-          aria-label="Maximize"
-        >
-          <Stop size={12} color="currentColor" />
-        </button>
-        <button
-          onClick={handleClose}
-          className="flex h-10 w-11 items-center justify-center transition-colors hover:bg-red-500 hover:text-white"
-          style={{ color: 'var(--text-secondary)' }}
-          aria-label="Close"
-        >
-          <CloseSquare size={14} color="currentColor" />
-        </button>
-      </div>
+      {/* Balance spacer for centering the title */}
+      <div className="w-[88px] shrink-0" />
     </header>
   )
 }
+
+const TrafficLight = ({
+  color,
+  hoverColor,
+  onClick,
+  'aria-label': ariaLabel,
+  showIcon,
+  icon,
+}: {
+  color: string
+  hoverColor: string
+  onClick: () => void
+  'aria-label': string
+  showIcon: boolean
+  icon: 'close' | 'minimize' | 'maximize'
+}) => (
+  <button
+    onClick={onClick}
+    aria-label={ariaLabel}
+    className="flex h-3 w-3 items-center justify-center rounded-full transition-colors"
+    style={{ background: showIcon ? hoverColor : color }}
+    onMouseDown={(e) => e.stopPropagation()}
+  >
+    {showIcon && (
+      <svg
+        width="6"
+        height="6"
+        viewBox="0 0 6 6"
+        fill="none"
+        stroke="rgba(0,0,0,0.6)"
+        strokeWidth="1.2"
+        strokeLinecap="round"
+      >
+        {icon === 'close' && (
+          <>
+            <line x1="0.5" y1="0.5" x2="5.5" y2="5.5" />
+            <line x1="5.5" y1="0.5" x2="0.5" y2="5.5" />
+          </>
+        )}
+        {icon === 'minimize' && <line x1="0.5" y1="3" x2="5.5" y2="3" />}
+        {icon === 'maximize' && (
+          <>
+            <line x1="0.5" y1="1" x2="3" y2="5" />
+            <line x1="5.5" y1="1" x2="3" y2="5" />
+          </>
+        )}
+      </svg>
+    )}
+  </button>
+)
