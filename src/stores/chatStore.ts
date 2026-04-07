@@ -6,7 +6,8 @@ import { useWorkspaceStore } from './workspaceStore'
 import { useEngineStore } from './engineStore'
 
 const AUTO_TITLE_MAX_LENGTH = 50
-const CONTROL_TOKEN_RE = /<\|im_(end|start)\|?>?/g
+const CONTROL_TOKEN_RE =
+  /<\|im_(end|start)\|?>?|<\/?tool_(call|result)>?/g
 
 function deriveTitle(content: string): string {
   const firstLine = content.split('\n')[0].trim()
@@ -15,7 +16,10 @@ function deriveTitle(content: string): string {
 }
 
 function stripControlTokens(s: string): string {
-  return s.replace(CONTROL_TOKEN_RE, '').trim()
+  let result = s.replace(CONTROL_TOKEN_RE, '')
+  const toolIdx = result.indexOf('<tool_call')
+  if (toolIdx !== -1) result = result.slice(0, toolIdx)
+  return result.trim()
 }
 
 let _listenersActive = false
@@ -171,9 +175,14 @@ export const useChatStore = create<ChatState>((set, get) => ({
           ],
           isStreaming: false,
           streamingContent: '',
+          activeToolCalls: [],
         }))
       } else {
-        set({ isStreaming: false, streamingContent: '' })
+        set({
+          isStreaming: false,
+          streamingContent: '',
+          activeToolCalls: [],
+        })
       }
       useEngineStore.getState().setGenerating(false)
       return
@@ -235,14 +244,38 @@ export const useChatStore = create<ChatState>((set, get) => ({
     }))
   },
 
-  handleStreamError: (_chatId, error) => {
+  handleStreamError: (chatId, error) => {
     console.error('Inference error:', error)
-    set({
-      isStreaming: false,
-      streamingContent: '',
-      streamingChatId: null,
-      activeToolCalls: [],
-    })
+    const { currentChatId } = get()
+
+    if (currentChatId === chatId) {
+      set((s) => ({
+        messages: [
+          ...s.messages,
+          {
+            id: `error-${Date.now()}`,
+            chatId,
+            agentId: null,
+            role: 'system' as const,
+            content: `Error: ${error}`,
+            metadata: null,
+            createdAt: new Date().toISOString(),
+            sortOrder: s.messages.length,
+          },
+        ],
+        isStreaming: false,
+        streamingContent: '',
+        streamingChatId: null,
+        activeToolCalls: [],
+      }))
+    } else {
+      set({
+        isStreaming: false,
+        streamingContent: '',
+        streamingChatId: null,
+        activeToolCalls: [],
+      })
+    }
     useEngineStore.getState().setGenerating(false)
   },
 

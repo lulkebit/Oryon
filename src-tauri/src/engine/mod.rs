@@ -301,6 +301,24 @@ const CONTROL_PATTERNS: &[&str] = &[
 ];
 
 const MAX_TOOL_ROUNDS: usize = 10;
+const MAX_TOOL_RESULT_CHARS: usize = 3000;
+
+fn truncate_tool_output(output: &str) -> String {
+    if output.len() <= MAX_TOOL_RESULT_CHARS {
+        return output.to_string();
+    }
+    let mut truncated = output[..MAX_TOOL_RESULT_CHARS].to_string();
+    truncated.push_str("\n\n[output truncated]");
+    truncated
+}
+
+fn strip_tool_call_markup(s: &str) -> String {
+    let mut result = s.to_string();
+    if let Some(start) = result.find("<tool_call>") {
+        result.truncate(start);
+    }
+    result.trim().to_string()
+}
 
 fn run_agentic_loop(
     backend: &LlamaBackend,
@@ -316,15 +334,24 @@ fn run_agentic_loop(
     let mut total_output = String::new();
 
     for round in 0..MAX_TOOL_ROUNDS {
+        log::info!(
+            "Agentic loop round {round}, messages={}, total_output={}chars",
+            messages.len(),
+            total_output.len()
+        );
+
         match run_inference(backend, model, &messages, params, cancel, chat_id, app_handle, workspace) {
             Ok(content) => {
-                if let Some(tool_call) = extract_tool_call(&content) {
-                    let text_before = content
-                        .find("<tool_call>")
-                        .map(|p| content[..p].to_string())
-                        .unwrap_or_default();
+                log::info!(
+                    "Round {round} inference result: {} chars, has_tool_call={}",
+                    content.len(),
+                    content.contains("<tool_call>")
+                );
 
-                    let text_before = strip_control_tokens(&text_before);
+                if let Some(tool_call) = extract_tool_call(&content) {
+                    let text_before = strip_tool_call_markup(
+                        &strip_control_tokens(&content),
+                    );
                     if !text_before.is_empty() {
                         total_output.push_str(&text_before);
                         total_output.push('\n');
@@ -341,6 +368,12 @@ fn run_agentic_loop(
                         );
 
                         let result = crate::tools::executor::execute(&tool_call, ws);
+                        log::info!(
+                            "Tool {} result: success={}, output={}chars",
+                            tool_call.name,
+                            result.success,
+                            result.output.len()
+                        );
 
                         let _ = app_handle.emit(
                             "tool:result",
@@ -351,6 +384,8 @@ fn run_agentic_loop(
                             }),
                         );
 
+                        let tool_output = truncate_tool_output(&result.output);
+
                         messages.push((
                             "assistant".to_string(),
                             format!(
@@ -360,14 +395,16 @@ fn run_agentic_loop(
                         ));
                         messages.push((
                             "tool".to_string(),
-                            format!("<tool_result>\n{}\n</tool_result>", result.output),
+                            format!("<tool_result>\n{tool_output}\n</tool_result>"),
                         ));
 
                         continue;
                     }
                 }
 
-                let clean = strip_control_tokens(&content);
+                let clean = strip_tool_call_markup(
+                    &strip_control_tokens(&content),
+                );
                 total_output.push_str(&clean);
 
                 let _ = app_handle.emit(
@@ -380,13 +417,28 @@ fn run_agentic_loop(
                 return;
             }
             Err(e) => {
-                let _ = app_handle.emit(
-                    "chat:error",
-                    serde_json::json!({
-                        "chatId": chat_id,
-                        "error": e,
-                    }),
-                );
+                log::error!("Agentic loop round {round} error: {e}");
+
+                if !total_output.trim().is_empty() {
+                    total_output.push_str(&format!(
+                        "\n\n*Error: {e}*"
+                    ));
+                    let _ = app_handle.emit(
+                        "chat:complete",
+                        serde_json::json!({
+                            "chatId": chat_id,
+                            "content": total_output.trim(),
+                        }),
+                    );
+                } else {
+                    let _ = app_handle.emit(
+                        "chat:error",
+                        serde_json::json!({
+                            "chatId": chat_id,
+                            "error": e,
+                        }),
+                    );
+                }
                 return;
             }
         }
@@ -403,13 +455,26 @@ fn run_agentic_loop(
 }
 
 fn extract_tool_call(content: &str) -> Option<crate::tools::ToolCall> {
-    let start = content.find("<tool_call>")?;
-    let end = content.find("</tool_call>")?;
-    if end <= start {
-        return None;
+    let tag = "<tool_call>";
+    let start = content.find(tag)?;
+    let json_start = start + tag.len();
+
+    let json_str = if let Some(rel_end) = content[json_start..].find("</tool_call>") {
+        content[json_start..json_start + rel_end].trim()
+    } else {
+        content[json_start..].trim()
+    };
+
+    match serde_json::from_str::<crate::tools::ToolCall>(json_str) {
+        Ok(tc) => {
+            log::info!("Extracted tool call: {} args={}", tc.name, tc.args);
+            Some(tc)
+        }
+        Err(e) => {
+            log::warn!("Failed to parse tool call JSON: {e}\nRaw: {json_str}");
+            None
+        }
     }
-    let json_str = &content[start + "<tool_call>".len()..end].trim();
-    serde_json::from_str(json_str).ok()
 }
 
 fn strip_control_tokens(s: &str) -> String {
@@ -598,6 +663,7 @@ fn run_inference(
     let mut decoder = encoding_rs::UTF_8.new_decoder();
     let mut n_cur = batch.n_tokens();
     let n_max = n_prompt + params.max_tokens;
+    let mut in_tool_call = false;
 
     while n_cur < n_max {
         if cancel.load(Ordering::SeqCst) {
@@ -621,9 +687,13 @@ fn run_inference(
             let prev_len = output.len();
             output.push_str(&fragment);
 
+            if !in_tool_call && output.contains("<tool_call") {
+                in_tool_call = true;
+            }
+
             if let Some(pos) = contains_stop_sequence(&output) {
                 output.truncate(pos);
-                if pos > prev_len {
+                if !in_tool_call && pos > prev_len {
                     let clean = &fragment[..pos - prev_len];
                     if !clean.is_empty() {
                         let _ = app_handle.emit(
@@ -638,13 +708,15 @@ fn run_inference(
                 break;
             }
 
-            let _ = app_handle.emit(
-                "chat:token",
-                serde_json::json!({
-                    "chatId": chat_id,
-                    "token": fragment,
-                }),
-            );
+            if !in_tool_call {
+                let _ = app_handle.emit(
+                    "chat:token",
+                    serde_json::json!({
+                        "chatId": chat_id,
+                        "token": fragment,
+                    }),
+                );
+            }
         }
 
         batch.clear();
