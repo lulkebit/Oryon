@@ -1,8 +1,19 @@
-import { memo, useCallback, useState, type ComponentProps } from 'react'
+import {
+  memo,
+  useCallback,
+  useMemo,
+  useState,
+  isValidElement,
+  type ComponentProps,
+  type ReactNode,
+} from 'react'
 import ReactMarkdown from 'react-markdown'
 import remarkGfm from 'remark-gfm'
-import rehypeHighlight from 'rehype-highlight'
+import { Prism as SyntaxHighlighter } from 'react-syntax-highlighter'
+import oneDark from 'react-syntax-highlighter/dist/esm/styles/prism/one-dark'
+import oneLight from 'react-syntax-highlighter/dist/esm/styles/prism/one-light'
 import { Copy, TickCircle } from 'iconsax-react'
+import { useUiStore } from '@/stores/uiStore'
 
 interface MarkdownContentProps {
   content: string
@@ -10,11 +21,7 @@ interface MarkdownContentProps {
 
 export const MarkdownContent = memo(({ content }: MarkdownContentProps) => (
   <div className="markdown-body">
-    <ReactMarkdown
-      remarkPlugins={[remarkGfm]}
-      rehypePlugins={[rehypeHighlight]}
-      components={COMPONENTS}
-    >
+    <ReactMarkdown remarkPlugins={[remarkGfm]} components={COMPONENTS}>
       {content}
     </ReactMarkdown>
   </div>
@@ -22,21 +29,95 @@ export const MarkdownContent = memo(({ content }: MarkdownContentProps) => (
 
 MarkdownContent.displayName = 'MarkdownContent'
 
+const LANG_ALIASES: Record<string, string> = {
+  js: 'javascript',
+  mjs: 'javascript',
+  cjs: 'javascript',
+  ts: 'typescript',
+  jsx: 'jsx',
+  tsx: 'tsx',
+  py: 'python',
+  python3: 'python',
+  sh: 'bash',
+  shell: 'bash',
+  zsh: 'bash',
+  fish: 'bash',
+  yml: 'yaml',
+  rs: 'rust',
+  rb: 'ruby',
+  jl: 'julia',
+  kt: 'kotlin',
+  kts: 'kotlin',
+  md: 'markdown',
+  mkd: 'markdown',
+  dockerfile: 'docker',
+  vue: 'markup',
+  svelte: 'markup',
+  html: 'markup',
+  htm: 'markup',
+  xml: 'markup',
+  plist: 'xml',
+}
+
+const SUPPORTED_LANG = new Set(
+  SyntaxHighlighter.supportedLanguages as string[],
+)
+
+function getCodeString(node: ReactNode): string {
+  if (node == null || node === false) return ''
+  if (typeof node === 'string' || typeof node === 'number') {
+    return String(node)
+  }
+  if (Array.isArray(node)) {
+    return node.map(getCodeString).join('')
+  }
+  if (isValidElement(node)) {
+    const props = node.props as { children?: ReactNode }
+    return getCodeString(props.children)
+  }
+  return ''
+}
+
+function parseFenceLanguage(className?: string): string {
+  if (!className) return ''
+  const m = /language-([\w-]+)/.exec(className)
+  return m?.[1] ?? ''
+}
+
+function resolvePrismLanguage(fenceLabel: string): string {
+  const key = fenceLabel.trim().toLowerCase()
+  const mapped = LANG_ALIASES[key] ?? key
+  if (SUPPORTED_LANG.has(mapped)) return mapped
+  if (SUPPORTED_LANG.has(key)) return key
+  return 'clike'
+}
+
 function CodeBlock({
   className,
-  children,
+  codeText,
 }: {
   className?: string
-  children: string
+  codeText: string
 }) {
-  const language = className?.replace('hljs language-', '') ?? ''
+  const resolvedTheme = useUiStore((s) => s.resolvedTheme)
+  const prismStyle = resolvedTheme === 'dark' ? oneDark : oneLight
+  const fenceLabel = parseFenceLanguage(className)
+  const prismLang = resolvePrismLanguage(fenceLabel)
+  const headerLabel = (
+    fenceLabel || (prismLang === 'clike' ? 'code' : prismLang) || 'code'
+  ).toUpperCase()
   const [copied, setCopied] = useState(false)
 
+  const trimmedCopy = useMemo(
+    () => codeText.replace(/\n$/, ''),
+    [codeText],
+  )
+
   const handleCopy = useCallback(() => {
-    navigator.clipboard.writeText(children.replace(/\n$/, ''))
+    void navigator.clipboard.writeText(trimmedCopy)
     setCopied(true)
     setTimeout(() => setCopied(false), 2000)
-  }, [children])
+  }, [trimmedCopy])
 
   return (
     <div
@@ -67,10 +148,12 @@ function CodeBlock({
             letterSpacing: '0.5px',
           }}
         >
-          {language || 'code'}
+          {headerLabel}
         </span>
         <button
+          type="button"
           onClick={handleCopy}
+          aria-label={copied ? 'Copied' : 'Copy code'}
           className="flex items-center transition-colors"
           style={{
             gap: '4px',
@@ -103,18 +186,27 @@ function CodeBlock({
           )}
         </button>
       </div>
-      <pre
-        style={{
+      <SyntaxHighlighter
+        language={prismLang}
+        style={prismStyle}
+        PreTag="div"
+        codeTagProps={{
+          style: {
+            fontFamily: 'var(--font-mono)',
+          },
+        }}
+        customStyle={{
           margin: 0,
           padding: '12px 16px',
-          overflow: 'auto',
           fontSize: '12px',
           lineHeight: '20px',
           fontFamily: 'var(--font-mono)',
+          borderRadius: 0,
+          background: 'transparent',
         }}
       >
-        <code className={className}>{children}</code>
-      </pre>
+        {trimmedCopy}
+      </SyntaxHighlighter>
     </div>
   )
 }
@@ -125,11 +217,12 @@ const COMPONENTS: ComponentProps<typeof ReactMarkdown>['components'] = {
   },
 
   code({ className, children, ...rest }) {
-    const isBlock = className?.includes('language-') || className?.includes('hljs')
-    const text = String(children)
+    const codeText = getCodeString(children)
+    const hasFenceLang = Boolean(parseFenceLanguage(className))
+    const isBlock = hasFenceLang || codeText.includes('\n')
 
     if (isBlock) {
-      return <CodeBlock className={className} children={text} />
+      return <CodeBlock className={className} codeText={codeText} />
     }
 
     return (
