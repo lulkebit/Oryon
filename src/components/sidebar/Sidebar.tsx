@@ -64,7 +64,10 @@ export const Sidebar = () => {
       }}
     >
       {/* Header buttons */}
-      <div className="flex flex-col gap-[4px] p-[12px]">
+      <div
+        className="flex flex-col"
+        style={{ gap: '4px', padding: '16px 16px 12px' }}
+      >
         <SidebarButton
           icon={<Add size={18} color="currentColor" />}
           label="New Agent"
@@ -87,23 +90,41 @@ export const Sidebar = () => {
 
       {/* Divider */}
       <div
-        className="mx-[12px] h-px"
-        style={{ background: 'var(--border-subtle)' }}
+        className="h-px"
+        style={{
+          background: 'var(--border-subtle)',
+          margin: '0 16px',
+        }}
       />
 
       {/* Workspace list */}
-      <div className="flex-1 overflow-y-auto px-[12px] pt-[8px] pb-[12px]">
+      <div
+        className="flex-1 overflow-y-auto"
+        style={{ padding: '12px 16px 16px' }}
+      >
         {workspaces.length === 0 && !sidebarCollapsed && (
-          <div className="flex flex-col items-center gap-[12px] py-[40px]">
+          <div
+            className="flex flex-col items-center"
+            style={{ gap: '12px', padding: '48px 8px' }}
+          >
             <p
-              className="text-[12px]"
-              style={{ color: 'var(--text-muted)' }}
+              style={{
+                fontSize: '12px',
+                lineHeight: '18px',
+                color: 'var(--text-muted)',
+              }}
             >
               No workspaces yet
             </p>
             <button
-              className="inline-flex h-[36px] items-center gap-[8px] rounded-[6px] px-[12px] text-[13px] font-medium transition-colors"
+              className="inline-flex items-center transition-colors"
               style={{
+                height: '36px',
+                gap: '8px',
+                padding: '0 16px',
+                borderRadius: '6px',
+                fontSize: '13px',
+                fontWeight: 500,
                 color: 'var(--text-secondary)',
                 background: 'var(--bg-elevated)',
               }}
@@ -125,16 +146,22 @@ export const Sidebar = () => {
             (c) => c.workspaceId === workspace.id
           )
           return (
-            <div key={workspace.id} className="mb-[8px]">
+            <div key={workspace.id} style={{ marginBottom: '12px' }}>
               {!sidebarCollapsed && (
                 <p
-                  className="mb-[4px] px-[8px] pt-[12px] text-[11px] font-medium uppercase tracking-wider"
-                  style={{ color: 'var(--text-muted)' }}
+                  style={{
+                    padding: '12px 12px 6px',
+                    fontSize: '11px',
+                    fontWeight: 500,
+                    textTransform: 'uppercase',
+                    letterSpacing: '0.05em',
+                    color: 'var(--text-muted)',
+                  }}
                 >
                   {workspace.name}
                 </p>
               )}
-              <div className="flex flex-col gap-[2px]">
+              <div className="flex flex-col" style={{ gap: '2px' }}>
                 {workspaceChats.map((chat) => (
                   <SidebarItem
                     key={chat.id}
@@ -152,8 +179,11 @@ export const Sidebar = () => {
 
       {/* Footer */}
       <div
-        className="border-t p-[12px]"
-        style={{ borderColor: 'var(--border-subtle)' }}
+        className="border-t"
+        style={{
+          borderColor: 'var(--border-subtle)',
+          padding: '12px 16px',
+        }}
       >
         <SidebarButton
           icon={<Setting2 size={18} color="currentColor" />}
@@ -196,8 +226,14 @@ const SidebarButton = ({
 }) => (
   <button
     onClick={onClick}
-    className="flex h-[36px] w-full items-center gap-[10px] rounded-[6px] px-[10px] text-[13px] font-medium transition-colors"
+    className="flex w-full items-center transition-colors"
     style={{
+      height: '36px',
+      gap: '10px',
+      padding: '0 12px',
+      borderRadius: '6px',
+      fontSize: '13px',
+      fontWeight: 500,
       color: active ? 'var(--text-primary)' : 'var(--text-secondary)',
       background: active ? 'var(--bg-overlay)' : 'transparent',
     }}
@@ -216,8 +252,11 @@ const SidebarButton = ({
         <span className="flex-1 text-left">{label}</span>
         {shortcut && (
           <kbd
-            className="text-[11px] font-normal"
-            style={{ color: 'var(--text-muted)' }}
+            style={{
+              fontSize: '11px',
+              fontWeight: 400,
+              color: 'var(--text-muted)',
+            }}
           >
             {shortcut}
           </kbd>

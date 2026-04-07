@@ -21,13 +21,23 @@ export const SettingsView = () => {
     <div className="flex h-full flex-col">
       {/* Header */}
       <div
-        className="flex h-[52px] items-center gap-[12px] border-b px-[24px]"
-        style={{ borderColor: 'var(--border-subtle)' }}
+        className="flex items-center border-b"
+        style={{
+          height: '52px',
+          gap: '12px',
+          padding: '0 24px',
+          borderColor: 'var(--border-subtle)',
+        }}
       >
         <button
           onClick={() => setActiveView('chat')}
-          className="flex h-[32px] w-[32px] items-center justify-center rounded-[6px] transition-colors"
-          style={{ color: 'var(--text-secondary)' }}
+          className="flex items-center justify-center transition-colors"
+          style={{
+            width: '32px',
+            height: '32px',
+            borderRadius: '6px',
+            color: 'var(--text-secondary)',
+          }}
           onMouseEnter={(e) => {
             e.currentTarget.style.background = 'var(--bg-overlay)'
           }}
@@ -39,8 +49,11 @@ export const SettingsView = () => {
           <ArrowLeft2 size={18} color="currentColor" />
         </button>
         <h1
-          className="text-[14px] font-semibold"
-          style={{ color: 'var(--text-primary)' }}
+          style={{
+            fontSize: '14px',
+            fontWeight: 600,
+            color: 'var(--text-primary)',
+          }}
         >
           Settings
         </h1>
@@ -50,16 +63,25 @@ export const SettingsView = () => {
       <div className="flex flex-1 overflow-hidden">
         {/* Nav */}
         <nav
-          className="w-[200px] shrink-0 border-r p-[12px]"
-          style={{ borderColor: 'var(--border-subtle)' }}
+          className="shrink-0 border-r"
+          style={{
+            width: '200px',
+            padding: '16px',
+            borderColor: 'var(--border-subtle)',
+          }}
         >
-          <div className="flex flex-col gap-[2px]">
+          <div className="flex flex-col" style={{ gap: '2px' }}>
             {CATEGORIES.map((cat) => (
               <button
                 key={cat}
                 onClick={() => setActiveCategory(cat)}
-                className="relative flex h-[32px] w-full items-center rounded-[6px] px-[12px] text-[13px] font-medium transition-colors"
+                className="relative flex w-full items-center transition-colors"
                 style={{
+                  height: '36px',
+                  padding: '0 16px',
+                  borderRadius: '6px',
+                  fontSize: '13px',
+                  fontWeight: 500,
                   color:
                     activeCategory === cat
                       ? 'var(--text-primary)'
@@ -80,8 +102,13 @@ export const SettingsView = () => {
               >
                 {activeCategory === cat && (
                   <div
-                    className="absolute left-0 top-1/2 h-[16px] w-[2px] -translate-y-1/2 rounded-full"
-                    style={{ background: 'var(--accent)' }}
+                    className="absolute top-1/2 -translate-y-1/2 rounded-full"
+                    style={{
+                      left: 0,
+                      width: '2px',
+                      height: '16px',
+                      background: 'var(--accent)',
+                    }}
                   />
                 )}
                 {cat}
@@ -91,23 +118,35 @@ export const SettingsView = () => {
         </nav>
 
         {/* Panel */}
-        <div className="flex-1 overflow-y-auto p-[24px]">
+        <div
+          className="flex-1 overflow-y-auto"
+          style={{ padding: '32px' }}
+        >
           {activeCategory === 'General' && (
             <div>
               <h2
-                className="mb-[16px] text-[14px] font-semibold"
-                style={{ color: 'var(--text-primary)' }}
+                style={{
+                  marginBottom: '20px',
+                  fontSize: '14px',
+                  fontWeight: 600,
+                  color: 'var(--text-primary)',
+                }}
               >
                 Appearance
               </h2>
-              <div className="mb-[24px]">
+              <div style={{ marginBottom: '32px' }}>
                 <label
-                  className="mb-[8px] block text-[12px]"
-                  style={{ color: 'var(--text-secondary)' }}
+                  className="block"
+                  style={{
+                    marginBottom: '10px',
+                    fontSize: '12px',
+                    lineHeight: '18px',
+                    color: 'var(--text-secondary)',
+                  }}
                 >
                   Theme
                 </label>
-                <div className="flex gap-[8px]">
+                <div className="flex" style={{ gap: '8px' }}>
                   {([
                     { value: 'system', icon: Monitor, label: 'System' },
                     { value: 'dark', icon: Moon, label: 'Dark' },
@@ -116,8 +155,14 @@ export const SettingsView = () => {
                     <button
                       key={value}
                       onClick={() => setTheme(value as Theme)}
-                      className="flex h-[36px] items-center gap-[8px] rounded-[6px] border px-[12px] text-[13px] font-medium transition-colors"
+                      className="flex items-center border transition-colors"
                       style={{
+                        height: '36px',
+                        gap: '8px',
+                        padding: '0 16px',
+                        borderRadius: '6px',
+                        fontSize: '13px',
+                        fontWeight: 500,
                         borderColor:
                           theme === value
                             ? 'var(--accent)'
@@ -142,8 +187,10 @@ export const SettingsView = () => {
           )}
           {activeCategory !== 'General' && (
             <p
-              className="text-[13px]"
-              style={{ color: 'var(--text-muted)' }}
+              style={{
+                fontSize: '13px',
+                color: 'var(--text-muted)',
+              }}
             >
               {activeCategory} settings coming soon.
             </p>

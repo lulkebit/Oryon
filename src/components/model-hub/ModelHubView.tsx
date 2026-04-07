@@ -8,19 +8,31 @@ export const ModelHubView = () => {
     <div className="flex h-full flex-col">
       {/* Header */}
       <div
-        className="flex h-[52px] items-center justify-between border-b px-[24px]"
-        style={{ borderColor: 'var(--border-subtle)' }}
+        className="flex items-center justify-between border-b"
+        style={{
+          height: '52px',
+          padding: '0 24px',
+          borderColor: 'var(--border-subtle)',
+        }}
       >
         <h1
-          className="text-[14px] font-semibold"
-          style={{ color: 'var(--text-primary)' }}
+          style={{
+            fontSize: '14px',
+            fontWeight: 600,
+            color: 'var(--text-primary)',
+          }}
         >
           Model Hub
         </h1>
         <button
           onClick={() => setActiveView('chat')}
-          className="flex h-[32px] w-[32px] items-center justify-center rounded-[6px] transition-colors"
-          style={{ color: 'var(--text-muted)' }}
+          className="flex items-center justify-center transition-colors"
+          style={{
+            width: '32px',
+            height: '32px',
+            borderRadius: '6px',
+            color: 'var(--text-muted)',
+          }}
           onMouseEnter={(e) => {
             e.currentTarget.style.background = 'var(--bg-overlay)'
           }}
@@ -34,10 +46,14 @@ export const ModelHubView = () => {
       </div>
 
       {/* Search */}
-      <div className="p-[24px] pb-0">
+      <div style={{ padding: '24px 24px 0' }}>
         <div
-          className="flex h-[40px] items-center gap-[10px] rounded-[8px] border px-[12px]"
+          className="flex items-center border"
           style={{
+            height: '40px',
+            gap: '10px',
+            padding: '0 14px',
+            borderRadius: '8px',
             background: 'var(--bg-input)',
             borderColor: 'var(--border-default)',
           }}
@@ -46,17 +62,25 @@ export const ModelHubView = () => {
           <input
             type="text"
             placeholder="Search models..."
-            className="flex-1 bg-transparent text-[13px] outline-none"
-            style={{ color: 'var(--text-primary)' }}
+            className="flex-1 bg-transparent outline-none"
+            style={{
+              fontSize: '13px',
+              color: 'var(--text-primary)',
+            }}
           />
         </div>
       </div>
 
       {/* Empty state */}
-      <div className="flex flex-1 items-center justify-center p-[24px]">
+      <div
+        className="flex flex-1 items-center justify-center"
+        style={{ padding: '24px' }}
+      >
         <p
-          className="text-[13px]"
-          style={{ color: 'var(--text-muted)' }}
+          style={{
+            fontSize: '13px',
+            color: 'var(--text-muted)',
+          }}
         >
           Download a model to get started
         </p>
