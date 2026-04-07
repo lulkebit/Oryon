@@ -12,6 +12,7 @@ use std::collections::HashMap;
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ToolCall {
     pub name: String,
+    #[serde(alias = "arguments")]
     pub args: serde_json::Value,
 }
 

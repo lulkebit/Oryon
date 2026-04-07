@@ -548,35 +548,30 @@ const SYSTEM_PROMPT_BASE: &str =
 
 const TOOL_PROMPT_SECTION: &str = r#"
 
-You have tools to interact with the project. Available tools:
-- glob: Find files. Args: {"pattern": "**/*.rs"}
-- grep: Search content. Args: {"pattern": "TODO", "glob": "*.ts"}
-- file_read: Read file. Args: {"path": "src/main.rs"}
-- file_write: Write file. Args: {"path": "file.txt", "content": "hello"}
-- file_patch: Edit file. Args: {"path": "file.txt", "old_string": "old", "new_string": "new"}
-- file_create: New file. Args: {"path": "file.txt", "content": "hello"}
-- file_delete: Delete. Args: {"path": "file.txt"}
-- shell_exec: Run command. Args: {"command": "ls -la"}
-- git_status: Git status. Args: {}
-- git_diff: Show diffs. Args: {}
-- git_commit: Commit. Args: {"message": "fix bug"}
-- git_log: History. Args: {"count": 5}
+# Tools
 
-To call a tool, output exactly this format:
+You may call one or more functions to assist with the user query.
+
+You are provided with function signatures within <tools></tools> XML tags:
+<tools>
+{"type":"function","function":{"name":"glob","description":"Find files matching a glob pattern in the workspace","parameters":{"type":"object","properties":{"pattern":{"type":"string","description":"Glob pattern like * or **/*.rs"}},"required":["pattern"]}}}
+{"type":"function","function":{"name":"grep","description":"Search file contents using regex","parameters":{"type":"object","properties":{"pattern":{"type":"string","description":"Regex search pattern"},"glob":{"type":"string","description":"File filter like *.ts"}},"required":["pattern"]}}}
+{"type":"function","function":{"name":"file_read","description":"Read the contents of a file","parameters":{"type":"object","properties":{"path":{"type":"string","description":"Relative file path"}},"required":["path"]}}}
+{"type":"function","function":{"name":"file_write","description":"Write or overwrite a file","parameters":{"type":"object","properties":{"path":{"type":"string","description":"Relative file path"},"content":{"type":"string","description":"File content"}},"required":["path","content"]}}}
+{"type":"function","function":{"name":"file_patch","description":"Search and replace text in a file","parameters":{"type":"object","properties":{"path":{"type":"string","description":"Relative file path"},"old_string":{"type":"string","description":"Text to find"},"new_string":{"type":"string","description":"Replacement text"}},"required":["path","old_string","new_string"]}}}
+{"type":"function","function":{"name":"file_create","description":"Create a new file","parameters":{"type":"object","properties":{"path":{"type":"string","description":"Relative file path"},"content":{"type":"string","description":"File content"}},"required":["path","content"]}}}
+{"type":"function","function":{"name":"file_delete","description":"Delete a file","parameters":{"type":"object","properties":{"path":{"type":"string","description":"Relative file path"}},"required":["path"]}}}
+{"type":"function","function":{"name":"shell_exec","description":"Execute a shell command","parameters":{"type":"object","properties":{"command":{"type":"string","description":"Shell command to run"}},"required":["command"]}}}
+{"type":"function","function":{"name":"git_status","description":"Show git status of the workspace","parameters":{"type":"object","properties":{}}}}
+{"type":"function","function":{"name":"git_diff","description":"Show git diffs","parameters":{"type":"object","properties":{"staged":{"type":"boolean","description":"Show staged changes"}}}}}
+{"type":"function","function":{"name":"git_commit","description":"Stage and commit changes","parameters":{"type":"object","properties":{"message":{"type":"string","description":"Commit message"}},"required":["message"]}}}
+{"type":"function","function":{"name":"git_log","description":"Show recent commit history","parameters":{"type":"object","properties":{"count":{"type":"number","description":"Number of commits"}}}}}
+</tools>
+
+For each function call, return a json object with function name and arguments within <tool_call></tool_call> XML tags:
 <tool_call>
-{"name": "glob", "args": {"pattern": "*"}}
+{"name": "function_name", "arguments": {"arg1": "value1"}}
 </tool_call>
-
-Example conversation:
-User: What files are in this project?
-Assistant: Let me check.
-<tool_call>
-{"name": "glob", "args": {"pattern": "*"}}
-</tool_call>
-
-Then I receive the result and tell you what I found.
-
-Important: Always use the exact <tool_call> JSON format shown above.
 "#;
 
 fn build_system_prompt(workspace: Option<&str>) -> String {
