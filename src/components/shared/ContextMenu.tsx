@@ -36,7 +36,7 @@ export const ContextMenu = ({ x, y, items, onClose }: ContextMenuProps) => {
   return (
     <div
       ref={ref}
-      className="fixed z-50 border"
+      className="popover-enter fixed z-50 border"
       style={{
         left: x,
         top: y,
@@ -46,7 +46,8 @@ export const ContextMenu = ({ x, y, items, onClose }: ContextMenuProps) => {
         background: 'var(--bg-elevated)',
         borderColor: 'var(--border-default)',
         boxShadow: 'var(--shadow-md)',
-      }}
+        '--popover-origin': 'top left',
+      } as React.CSSProperties}
     >
       {items.map((item, i) => (
         <button
@@ -55,7 +56,7 @@ export const ContextMenu = ({ x, y, items, onClose }: ContextMenuProps) => {
             item.onClick()
             onClose()
           }}
-          className="flex w-full items-center transition-colors"
+          className="btn-press flex w-full items-center"
           style={{
             height: '32px',
             padding: '0 12px',

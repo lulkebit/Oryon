@@ -63,7 +63,7 @@ export const AgentSelector = ({ chatId, onOpenConfig }: AgentSelectorProps) => {
     <div ref={ref} style={{ position: 'relative' }}>
       <button
         onClick={() => setOpen(!open)}
-        className="flex items-center transition-colors"
+        className="btn-press flex items-center"
         style={{
           height: '28px',
           gap: '6px',
@@ -100,7 +100,7 @@ export const AgentSelector = ({ chatId, onOpenConfig }: AgentSelectorProps) => {
 
       {open && (
         <div
-          className="border"
+          className="popover-enter border"
           style={{
             position: 'absolute',
             top: '100%',
@@ -123,7 +123,7 @@ export const AgentSelector = ({ chatId, onOpenConfig }: AgentSelectorProps) => {
               <button
                 key={a.id}
                 onClick={() => handleSelect(a)}
-                className="flex w-full items-center transition-colors"
+                className="btn-press flex w-full items-center"
                 style={{
                   height: '32px',
                   padding: '0 12px',
@@ -180,7 +180,7 @@ export const AgentSelector = ({ chatId, onOpenConfig }: AgentSelectorProps) => {
 
           <button
             onClick={handleCreate}
-            className="flex w-full items-center transition-colors"
+            className="btn-press flex w-full items-center"
             style={{
               height: '32px',
               padding: '0 12px',
@@ -205,7 +205,7 @@ export const AgentSelector = ({ chatId, onOpenConfig }: AgentSelectorProps) => {
               onOpenConfig()
               setOpen(false)
             }}
-            className="flex w-full items-center transition-colors"
+            className="btn-press flex w-full items-center"
             style={{
               height: '32px',
               padding: '0 12px',

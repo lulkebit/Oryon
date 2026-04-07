@@ -38,7 +38,7 @@ export const SettingsView = () => {
       >
         <button
           onClick={() => setActiveView('chat')}
-          className="flex items-center justify-center transition-colors"
+          className="btn-press flex items-center justify-center"
           style={{
             width: '32px',
             height: '32px',
@@ -80,7 +80,7 @@ export const SettingsView = () => {
               <button
                 key={cat}
                 onClick={() => setActiveCategory(cat)}
-                className="relative flex w-full items-center transition-colors"
+                className="btn-press relative flex w-full items-center"
                 style={{
                   height: '36px',
                   padding: '0 16px',
@@ -95,6 +95,7 @@ export const SettingsView = () => {
                     activeCategory === cat
                       ? 'var(--bg-overlay)'
                       : 'transparent',
+                  transition: 'background 150ms var(--ease-out), color 150ms var(--ease-out)',
                 }}
                 onMouseEnter={(e) => {
                   if (activeCategory !== cat)
@@ -105,17 +106,18 @@ export const SettingsView = () => {
                     e.currentTarget.style.background = 'transparent'
                 }}
               >
-                {activeCategory === cat && (
-                  <div
-                    className="absolute top-1/2 -translate-y-1/2 rounded-full"
-                    style={{
-                      left: 0,
-                      width: '2px',
-                      height: '16px',
-                      background: 'var(--accent)',
-                    }}
-                  />
-                )}
+                <div
+                  className="absolute top-1/2 -translate-y-1/2 rounded-full"
+                  style={{
+                    left: 0,
+                    width: '2px',
+                    height: activeCategory === cat ? '16px' : '0px',
+                    background: 'var(--accent)',
+                    opacity: activeCategory === cat ? 1 : 0,
+                    transition:
+                      'height 200ms var(--ease-out), opacity 200ms var(--ease-out)',
+                  }}
+                />
                 {cat}
               </button>
             ))}
@@ -216,6 +218,7 @@ function Toggle({
       role="switch"
       aria-checked={checked}
       onClick={() => onChange(!checked)}
+      className="btn-press"
       style={{
         width: '36px',
         height: '20px',
@@ -224,7 +227,7 @@ function Toggle({
         border: '1px solid',
         borderColor: checked ? 'var(--accent)' : 'var(--border-default)',
         position: 'relative',
-        transition: 'background 150ms, border-color 150ms',
+        transition: 'background 200ms var(--ease-out), border-color 200ms var(--ease-out)',
         flexShrink: 0,
       }}
     >
@@ -237,7 +240,7 @@ function Toggle({
           height: '14px',
           borderRadius: '50%',
           background: checked ? 'var(--text-inverse)' : 'var(--text-muted)',
-          transition: 'left 150ms',
+          transition: 'left 200ms var(--ease-spring), background 200ms var(--ease-out)',
         }}
       />
     </button>
@@ -413,7 +416,7 @@ function GeneralSettings() {
               <button
                 key={value}
                 onClick={() => setTheme(value as Theme)}
-                className="flex items-center border transition-colors"
+                className="btn-press flex items-center border"
                 style={{
                   height: '32px',
                   gap: '6px',

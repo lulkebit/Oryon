@@ -1,10 +1,9 @@
-import { useState } from 'react'
+import { useState, useRef, useEffect } from 'react'
 import {
   DocumentText1,
   CommandSquare,
   SearchNormal1,
   Code1,
-  ArrowDown2,
   ArrowRight2,
   TickCircle,
   CloseCircle,
@@ -55,6 +54,8 @@ function formatArgsLabel(name: string, args: Record<string, unknown>): string {
 
 export const ToolCallBubble = ({ toolCall }: ToolCallBubbleProps) => {
   const [expanded, setExpanded] = useState(false)
+  const contentRef = useRef<HTMLDivElement>(null)
+  const [contentHeight, setContentHeight] = useState(0)
   const meta = TOOL_META[toolCall.toolName] ?? {
     label: toolCall.toolName,
     icon: CommandSquare,
@@ -62,6 +63,14 @@ export const ToolCallBubble = ({ toolCall }: ToolCallBubbleProps) => {
   }
   const Icon = meta.icon
   const argLabel = formatArgsLabel(toolCall.toolName, toolCall.args)
+
+  useEffect(() => {
+    if (expanded && contentRef.current) {
+      setContentHeight(
+        Math.min(contentRef.current.scrollHeight, 300)
+      )
+    }
+  }, [expanded, toolCall.output])
 
   const statusIcon =
     toolCall.status === 'running' ? (
@@ -76,10 +85,9 @@ export const ToolCallBubble = ({ toolCall }: ToolCallBubbleProps) => {
       <CloseCircle size={14} color="var(--status-error)" />
     )
 
-  const ChevronIcon = expanded ? ArrowDown2 : ArrowRight2
-
   return (
     <div
+      className="anim-slide-up"
       style={{
         margin: '8px 0',
         borderRadius: '8px',
@@ -92,7 +100,7 @@ export const ToolCallBubble = ({ toolCall }: ToolCallBubbleProps) => {
         onClick={() =>
           toolCall.status !== 'running' && setExpanded(!expanded)
         }
-        className="flex w-full items-center transition-colors"
+        className="btn-press flex w-full items-center"
         style={{
           gap: '8px',
           padding: '8px 12px',
@@ -142,36 +150,56 @@ export const ToolCallBubble = ({ toolCall }: ToolCallBubbleProps) => {
               {(toolCall.durationMs / 1000).toFixed(1)}s
             </span>
           )}
-          <ChevronIcon size={12} color="var(--text-muted)" />
+          <span
+            style={{
+              transition: 'transform 200ms var(--ease-out)',
+              transform: expanded ? 'rotate(90deg)' : 'rotate(0deg)',
+              display: 'flex',
+            }}
+          >
+            <ArrowRight2 size={12} color="var(--text-muted)" />
+          </span>
         </div>
       </button>
 
-      {expanded && toolCall.output && (
-        <div
-          style={{
-            borderTop: '1px solid var(--border-subtle)',
-            padding: '8px 12px',
-            maxHeight: '300px',
-            overflow: 'auto',
-          }}
-        >
-          <pre
+      {/* Animated expand/collapse */}
+      <div
+        style={{
+          maxHeight: expanded ? contentHeight : 0,
+          opacity: expanded ? 1 : 0,
+          overflow: 'hidden',
+          transition:
+            'max-height 200ms var(--ease-out), opacity 150ms var(--ease-out)',
+        }}
+      >
+        {toolCall.output && (
+          <div
+            ref={contentRef}
             style={{
-              margin: 0,
-              fontFamily: 'var(--font-mono)',
-              fontSize: '11px',
-              lineHeight: '18px',
-              color: 'var(--text-secondary)',
-              whiteSpace: 'pre-wrap',
-              wordBreak: 'break-word',
+              borderTop: '1px solid var(--border-subtle)',
+              padding: '8px 12px',
+              maxHeight: '300px',
+              overflow: 'auto',
             }}
           >
-            {toolCall.output.length > 5000
-              ? toolCall.output.slice(0, 5000) + '\n\n[output truncated]'
-              : toolCall.output}
-          </pre>
-        </div>
-      )}
+            <pre
+              style={{
+                margin: 0,
+                fontFamily: 'var(--font-mono)',
+                fontSize: '11px',
+                lineHeight: '18px',
+                color: 'var(--text-secondary)',
+                whiteSpace: 'pre-wrap',
+                wordBreak: 'break-word',
+              }}
+            >
+              {toolCall.output.length > 5000
+                ? toolCall.output.slice(0, 5000) + '\n\n[output truncated]'
+                : toolCall.output}
+            </pre>
+          </div>
+        )}
+      </div>
     </div>
   )
 }

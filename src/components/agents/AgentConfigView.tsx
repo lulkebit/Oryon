@@ -51,7 +51,7 @@ export const AgentConfigView = ({ onBack }: AgentConfigViewProps) => {
       >
         <button
           onClick={onBack}
-          className="flex items-center justify-center transition-colors"
+          className="btn-press flex items-center justify-center"
           style={{
             width: '28px',
             height: '28px',
@@ -95,7 +95,7 @@ export const AgentConfigView = ({ onBack }: AgentConfigViewProps) => {
               <button
                 key={a.id}
                 onClick={() => setSelectedId(a.id)}
-                className="flex w-full items-center transition-colors"
+                className="btn-press flex w-full items-center"
                 style={{
                   height: '36px',
                   padding: '0 12px',
@@ -150,7 +150,7 @@ export const AgentConfigView = ({ onBack }: AgentConfigViewProps) => {
           >
             <button
               onClick={handleCreate}
-              className="flex w-full items-center justify-center transition-colors"
+              className="btn-press flex w-full items-center justify-center"
               style={{
                 height: '32px',
                 borderRadius: '8px',
@@ -395,7 +395,7 @@ function AgentEditor({
             <div>
               <button
                 onClick={onDelete}
-                className="flex items-center transition-colors"
+                className="btn-press flex items-center"
                 style={{
                   height: '32px',
                   padding: '0 12px',
@@ -425,7 +425,7 @@ function AgentEditor({
       {/* Save bar */}
       {dirty && (
         <div
-          className="flex items-center justify-end border-t"
+          className="slide-up-enter flex items-center justify-end border-t"
           style={{
             height: '52px',
             padding: '0 24px',
@@ -435,7 +435,7 @@ function AgentEditor({
         >
           <button
             onClick={save}
-            className="flex items-center transition-colors"
+            className="btn-press flex items-center"
             style={{
               height: '32px',
               padding: '0 16px',

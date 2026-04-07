@@ -60,7 +60,7 @@ export class ErrorBoundary extends Component<Props, State> {
           </div>
           <button
             onClick={this.handleReset}
-            className="flex items-center justify-center transition-colors"
+            className="btn-press flex items-center justify-center"
             style={{
               height: '32px',
               padding: '0 16px',

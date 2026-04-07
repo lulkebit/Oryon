@@ -220,7 +220,7 @@ export const Sidebar = () => {
               No workspaces yet
             </p>
             <button
-              className="inline-flex items-center transition-colors"
+              className="btn-press inline-flex items-center"
               style={{
                 height: '36px',
                 gap: '8px',
@@ -288,7 +288,7 @@ export const Sidebar = () => {
                 ))}
                 {workspaceChats.length === 0 && !sidebarCollapsed && (
                   <button
-                    className="flex items-center transition-colors"
+                    className="btn-press flex items-center"
                     style={{
                       height: '32px',
                       gap: '8px',
@@ -383,7 +383,7 @@ const SidebarButton = ({
   <button
     onClick={onClick}
     disabled={disabled}
-    className="flex w-full items-center transition-colors"
+    className="btn-press flex w-full items-center"
     style={{
       height: '36px',
       gap: '8px',

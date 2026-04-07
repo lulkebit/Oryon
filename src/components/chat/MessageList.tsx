@@ -50,7 +50,7 @@ export const MessageList = ({
 
   if (messages.length === 0 && !isStreaming) {
     return (
-      <div className="flex flex-1 items-center justify-center">
+      <div className="anim-fade-in flex flex-1 items-center justify-center">
         <p style={{ fontSize: '13px', color: 'var(--text-muted)' }}>
           Send a message to start the conversation.
         </p>
@@ -104,7 +104,7 @@ export const MessageList = ({
 function ThinkingIndicator() {
   return (
     <div
-      className="flex items-center"
+      className="anim-slide-up flex items-center"
       style={{
         gap: '8px',
         height: '28px',

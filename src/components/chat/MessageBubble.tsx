@@ -14,7 +14,7 @@ export const MessageBubble = ({ role, content }: MessageBubbleProps) => {
   if (isSystem) {
     return (
       <div
-        className="flex items-start"
+        className="anim-message-in flex items-start"
         style={{
           gap: '8px',
           padding: '10px 14px',
@@ -45,7 +45,7 @@ export const MessageBubble = ({ role, content }: MessageBubbleProps) => {
   if (isUser) {
     return (
       <div
-        className="flex justify-end"
+        className="anim-message-in flex justify-end"
         style={{ padding: '14px 0' }}
       >
         <div
@@ -66,7 +66,7 @@ export const MessageBubble = ({ role, content }: MessageBubbleProps) => {
   }
 
   return (
-    <div style={{ padding: '14px 0' }}>
+    <div className="anim-message-in" style={{ padding: '14px 0' }}>
       <MarkdownContent content={content} />
     </div>
   )

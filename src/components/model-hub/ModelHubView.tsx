@@ -180,7 +180,7 @@ export const ModelHubView = () => {
         </h1>
         <button
           onClick={() => setActiveView('chat')}
-          className="flex items-center justify-center transition-colors"
+          className="flex items-center justify-center btn-press"
           style={{
             width: '32px',
             height: '32px',
@@ -258,7 +258,7 @@ function TabButton({
   return (
     <button
       onClick={onClick}
-      className="transition-colors"
+      className="btn-press"
       style={{
         padding: '10px 16px',
         fontSize: '13px',
@@ -320,7 +320,7 @@ function ExploreTab({
             borderRadius: '12px',
             background: 'var(--bg-elevated)',
             border: '1px solid var(--border-subtle)',
-            transition: 'border-color 150ms',
+            transition: 'border-color 150ms var(--ease-out)',
           }}
         >
           <SearchNormal1 size={16} color="var(--text-muted)" />
@@ -523,7 +523,7 @@ function ScrollButton({
     <button
       onClick={onClick}
       aria-label={`Scroll ${direction}`}
-      className="flex items-center justify-center transition-colors"
+      className="flex items-center justify-center btn-press"
       style={{
         width: '28px',
         height: '28px',
@@ -565,7 +565,7 @@ function BrowseModelCard({
 
   return (
     <div
-      className="flex flex-col border transition-colors"
+      className="flex flex-col border btn-press"
       style={{
         width: '300px',
         flexShrink: 0,
@@ -681,7 +681,7 @@ function BrowseModelCard({
           <div className="flex" style={{ gap: '8px' }}>
             <button
               onClick={() => setExpanded(true)}
-              className="flex flex-1 items-center justify-center transition-colors"
+              className="flex flex-1 items-center justify-center btn-press"
               style={{
                 height: '32px',
                 borderRadius: '8px',
@@ -704,7 +704,7 @@ function BrowseModelCard({
               <button
                 onClick={() => onDownload(model.id, recommended.filename)}
                 disabled={!!activeDownload}
-                className="flex flex-1 items-center justify-center transition-colors"
+                className="flex flex-1 items-center justify-center btn-press"
                 style={{
                   height: '32px',
                   borderRadius: '8px',
@@ -725,7 +725,7 @@ function BrowseModelCard({
         ) : (
           <button
             onClick={() => setExpanded(false)}
-            className="flex w-full items-center justify-center transition-colors"
+            className="flex w-full items-center justify-center btn-press"
             style={{
               height: '32px',
               borderRadius: '8px',
@@ -826,7 +826,7 @@ function FileRow({
       <button
         onClick={() => onDownload(repoId, file.filename)}
         disabled={disabled}
-        className="flex items-center transition-colors"
+        className="flex items-center btn-press"
         style={{
           gap: '4px',
           fontSize: '10px',
@@ -923,7 +923,7 @@ function SearchModelCard({
 
   return (
     <div
-      className="border transition-colors"
+      className="border btn-press"
       style={{
         borderRadius: '12px',
         borderColor: 'var(--border-subtle)',
@@ -977,7 +977,7 @@ function SearchModelCard({
             <button
               onClick={() => onDownload(model.id, recommended.filename)}
               disabled={!!activeDownload}
-              className="flex shrink-0 items-center transition-colors"
+              className="flex shrink-0 items-center btn-press"
               style={{
                 height: '32px',
                 gap: '5px',
@@ -1005,7 +1005,7 @@ function SearchModelCard({
               key={f.filename}
               onClick={() => onDownload(model.id, f.filename)}
               disabled={!!activeDownload}
-              className="flex items-center transition-colors"
+              className="flex items-center btn-press"
               style={{
                 gap: '4px',
                 height: '24px',
@@ -1161,7 +1161,7 @@ function DownloadBanner({
           {download.isPaused ? (
             <button
               onClick={onResume}
-              className="flex items-center justify-center transition-colors"
+              className="flex items-center justify-center btn-press"
               style={{
                 width: '28px',
                 height: '28px',
@@ -1181,7 +1181,7 @@ function DownloadBanner({
           ) : (
             <button
               onClick={onPause}
-              className="flex items-center justify-center transition-colors"
+              className="flex items-center justify-center btn-press"
               style={{
                 width: '28px',
                 height: '28px',
@@ -1201,7 +1201,7 @@ function DownloadBanner({
           )}
           <button
             onClick={onCancel}
-            className="flex items-center justify-center transition-colors"
+            className="flex items-center justify-center btn-press"
             style={{
               width: '28px',
               height: '28px',
@@ -1234,7 +1234,7 @@ function DownloadBanner({
             width: `${percent}%`,
             borderRadius: '2px',
             background: download.isPaused ? 'var(--text-muted)' : 'var(--accent)',
-            transition: 'width 300ms ease',
+            transition: 'width 300ms var(--ease-out)',
           }}
         />
       </div>
@@ -1287,7 +1287,7 @@ function DownloadedTab({
           return (
             <div
               key={model.id}
-              className="flex items-center border transition-colors"
+              className="flex items-center border btn-press"
               style={{
                 padding: '12px 16px',
                 borderRadius: '12px',
@@ -1341,7 +1341,7 @@ function DownloadedTab({
                       loadModelFromPath(model.storagePath, model.id)
                     }
                     disabled={loading}
-                    className="flex items-center transition-colors"
+                    className="flex items-center btn-press"
                     style={{
                       gap: '6px',
                       height: '32px',
@@ -1376,7 +1376,7 @@ function DownloadedTab({
                 )}
                 <button
                   onClick={() => onDelete(model.id)}
-                  className="flex items-center justify-center transition-colors"
+                  className="flex items-center justify-center btn-press"
                   style={{
                     width: '30px',
                     height: '32px',

@@ -92,7 +92,7 @@ export const ChatView = () => {
       {!loadedModel && !modelLoading && (
         <button
           onClick={() => setActiveView('models')}
-          className="flex items-center justify-center transition-colors"
+          className="btn-press flex items-center justify-center"
           style={{
             padding: '12px 24px',
             gap: '8px',
@@ -175,7 +175,7 @@ function ModelSelector({
       <button
         onClick={() => setOpen(!open)}
         disabled={modelLoading}
-        className="flex items-center transition-colors"
+        className="btn-press flex items-center"
         style={{
           height: '28px',
           gap: '6px',
@@ -209,7 +209,7 @@ function ModelSelector({
 
       {open && (
         <div
-          className="border"
+          className="popover-enter border"
           style={{
             position: 'absolute',
             top: '100%',
@@ -232,7 +232,7 @@ function ModelSelector({
                 onUnload()
                 setOpen(false)
               }}
-              className="flex w-full items-center transition-colors"
+              className="btn-press flex w-full items-center"
               style={{
                 height: '32px',
                 padding: '0 12px',
@@ -268,7 +268,7 @@ function ModelSelector({
                 key={m.id}
                 onClick={() => handleSelect(m.storagePath, m.id)}
                 disabled={isActive}
-                className="flex w-full items-center transition-colors"
+                className="btn-press flex w-full items-center"
                 style={{
                   height: '32px',
                   padding: '0 12px',
@@ -320,7 +320,7 @@ function ModelSelector({
               onGoToHub()
               setOpen(false)
             }}
-            className="flex w-full items-center transition-colors"
+            className="btn-press flex w-full items-center"
             style={{
               height: '32px',
               padding: '0 12px',
@@ -349,7 +349,7 @@ function ModelSelector({
 
 const EmptyState = () => (
   <div
-    className="flex h-full flex-col items-center justify-center"
+    className="anim-fade-in flex h-full flex-col items-center justify-center"
     style={{ padding: '40px' }}
   >
     <div className="flex flex-col items-center" style={{ gap: '24px' }}>

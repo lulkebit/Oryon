@@ -113,6 +113,7 @@ export const ChatInput = ({
       <div style={{ maxWidth: '768px', margin: '0 auto' }}>
       {attachError && (
         <p
+          className="anim-slide-up"
           style={{
             fontSize: '12px',
             color: 'var(--status-error)',
@@ -130,7 +131,7 @@ export const ChatInput = ({
           {attachments.map((att, i) => (
             <div
               key={`${att.filename}-${i}`}
-              className="flex items-center"
+              className="anim-slide-up flex items-center"
               style={{
                 gap: '8px',
                 padding: '4px 8px 4px 12px',
@@ -184,7 +185,7 @@ export const ChatInput = ({
       >
         <button
           onClick={handleAttach}
-          className="flex shrink-0 items-center justify-center transition-colors"
+          className="btn-press flex shrink-0 items-center justify-center"
           style={{
             width: '32px',
             height: '32px',
@@ -225,7 +226,7 @@ export const ChatInput = ({
         {isStreaming ? (
           <button
             onClick={onStop}
-            className="flex shrink-0 items-center justify-center transition-colors"
+            className="btn-press flex shrink-0 items-center justify-center"
             style={{
               width: '32px',
               height: '32px',
@@ -241,7 +242,7 @@ export const ChatInput = ({
           <button
             onClick={handleSend}
             disabled={!hasContent || disabled}
-            className="flex shrink-0 items-center justify-center transition-colors"
+            className="btn-press flex shrink-0 items-center justify-center"
             style={{
               width: '32px',
               height: '32px',
@@ -251,6 +252,7 @@ export const ChatInput = ({
                 ? 'var(--text-inverse)'
                 : 'var(--text-muted)',
               opacity: !hasContent || disabled ? 0.5 : 1,
+              transition: 'background 200ms var(--ease-out), color 200ms var(--ease-out), opacity 200ms var(--ease-out)',
             }}
             aria-label="Send message"
           >

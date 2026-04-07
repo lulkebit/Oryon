@@ -40,14 +40,16 @@ export const App = () => {
           style={{ background: 'var(--bg-base)' }}
         >
           <ErrorBoundary fallbackTitle="View failed to load">
-            {activeView === 'chat' && <ChatView />}
-            {activeView === 'models' && <ModelHubView />}
-            {activeView === 'settings' && <SettingsView />}
-            {activeView === 'agents' && (
-              <AgentConfigView
-                onBack={() => useUiStore.getState().setActiveView('chat')}
-              />
-            )}
+            <div key={activeView} className="anim-fade-in flex h-full flex-col">
+              {activeView === 'chat' && <ChatView />}
+              {activeView === 'models' && <ModelHubView />}
+              {activeView === 'settings' && <SettingsView />}
+              {activeView === 'agents' && (
+                <AgentConfigView
+                  onBack={() => useUiStore.getState().setActiveView('chat')}
+                />
+              )}
+            </div>
           </ErrorBoundary>
         </main>
       </div>
