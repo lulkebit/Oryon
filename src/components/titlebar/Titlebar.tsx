@@ -5,7 +5,7 @@ const appWindow = getCurrentWindow()
 
 export const Titlebar = () => {
   const [isMaximized, setIsMaximized] = useState(false)
-  const [hovered, setHovered] = useState<string | null>(null)
+  const [hovered, setHovered] = useState(false)
 
   useEffect(() => {
     appWindow.isMaximized().then(setIsMaximized)
@@ -46,7 +46,7 @@ export const Titlebar = () => {
 
   return (
     <header
-      className="flex h-11 shrink-0 items-center border-b select-none"
+      className="flex h-[44px] shrink-0 items-center border-b select-none"
       style={{
         background: 'var(--bg-surface)',
         borderColor: 'var(--border-subtle)',
@@ -54,16 +54,16 @@ export const Titlebar = () => {
     >
       {/* Traffic lights */}
       <div
-        className="flex items-center gap-2 pl-4 pr-3"
-        onMouseEnter={() => setHovered('group')}
-        onMouseLeave={() => setHovered(null)}
+        className="flex items-center gap-[8px] px-[16px]"
+        onMouseEnter={() => setHovered(true)}
+        onMouseLeave={() => setHovered(false)}
       >
         <TrafficLight
           color="#FF5F57"
           hoverColor="#FF3B30"
           onClick={handleClose}
           aria-label="Close"
-          showIcon={hovered === 'group'}
+          showIcon={hovered}
           icon="close"
         />
         <TrafficLight
@@ -71,7 +71,7 @@ export const Titlebar = () => {
           hoverColor="#F5A623"
           onClick={handleMinimize}
           aria-label="Minimize"
-          showIcon={hovered === 'group'}
+          showIcon={hovered}
           icon="minimize"
         />
         <TrafficLight
@@ -79,7 +79,7 @@ export const Titlebar = () => {
           hoverColor="#2DB83D"
           onClick={handleMaximize}
           aria-label={isMaximized ? 'Restore' : 'Maximize'}
-          showIcon={hovered === 'group'}
+          showIcon={hovered}
           icon="maximize"
         />
       </div>
@@ -90,14 +90,14 @@ export const Titlebar = () => {
         onMouseDown={handleDrag}
       >
         <span
-          className="text-xs font-medium"
+          className="text-[12px] font-medium"
           style={{ color: 'var(--text-secondary)' }}
         >
           Oryon
         </span>
       </div>
 
-      {/* Balance spacer for centering the title */}
+      {/* Balance spacer to keep title centered */}
       <div className="w-[88px] shrink-0" />
     </header>
   )
@@ -121,7 +121,7 @@ const TrafficLight = ({
   <button
     onClick={onClick}
     aria-label={ariaLabel}
-    className="flex h-3 w-3 items-center justify-center rounded-full transition-colors"
+    className="flex h-[12px] w-[12px] items-center justify-center rounded-full transition-colors"
     style={{ background: showIcon ? hoverColor : color }}
     onMouseDown={(e) => e.stopPropagation()}
   >

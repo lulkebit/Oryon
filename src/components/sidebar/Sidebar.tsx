@@ -64,7 +64,7 @@ export const Sidebar = () => {
       }}
     >
       {/* Header buttons */}
-      <div className="flex flex-col gap-1 px-3 pb-2 pt-3">
+      <div className="flex flex-col gap-[4px] p-[12px]">
         <SidebarButton
           icon={<Add size={18} color="currentColor" />}
           label="New Agent"
@@ -87,22 +87,22 @@ export const Sidebar = () => {
 
       {/* Divider */}
       <div
-        className="mx-3 border-b"
-        style={{ borderColor: 'var(--border-subtle)' }}
+        className="mx-[12px] h-px"
+        style={{ background: 'var(--border-subtle)' }}
       />
 
       {/* Workspace list */}
-      <div className="flex-1 overflow-y-auto px-3 pt-2 pb-3">
+      <div className="flex-1 overflow-y-auto px-[12px] pt-[8px] pb-[12px]">
         {workspaces.length === 0 && !sidebarCollapsed && (
-          <div className="flex flex-col items-center gap-3 px-2 py-10">
+          <div className="flex flex-col items-center gap-[12px] py-[40px]">
             <p
-              className="text-xs"
+              className="text-[12px]"
               style={{ color: 'var(--text-muted)' }}
             >
               No workspaces yet
             </p>
             <button
-              className="inline-flex items-center gap-2 rounded-md px-3 py-2 text-xs font-medium transition-colors"
+              className="inline-flex h-[36px] items-center gap-[8px] rounded-[6px] px-[12px] text-[13px] font-medium transition-colors"
               style={{
                 color: 'var(--text-secondary)',
                 background: 'var(--bg-elevated)',
@@ -114,7 +114,7 @@ export const Sidebar = () => {
                 e.currentTarget.style.background = 'var(--bg-elevated)'
               }}
             >
-              <FolderOpen size={14} color="currentColor" />
+              <FolderOpen size={16} color="currentColor" />
               Open Workspace
             </button>
           </div>
@@ -125,16 +125,16 @@ export const Sidebar = () => {
             (c) => c.workspaceId === workspace.id
           )
           return (
-            <div key={workspace.id} className="mb-3">
+            <div key={workspace.id} className="mb-[8px]">
               {!sidebarCollapsed && (
                 <p
-                  className="mb-1 px-2 pt-3 text-[11px] font-medium uppercase tracking-wider"
+                  className="mb-[4px] px-[8px] pt-[12px] text-[11px] font-medium uppercase tracking-wider"
                   style={{ color: 'var(--text-muted)' }}
                 >
                   {workspace.name}
                 </p>
               )}
-              <div className="flex flex-col gap-0.5">
+              <div className="flex flex-col gap-[2px]">
                 {workspaceChats.map((chat) => (
                   <SidebarItem
                     key={chat.id}
@@ -152,7 +152,7 @@ export const Sidebar = () => {
 
       {/* Footer */}
       <div
-        className="border-t px-3 py-3"
+        className="border-t p-[12px]"
         style={{ borderColor: 'var(--border-subtle)' }}
       >
         <SidebarButton
@@ -196,7 +196,7 @@ const SidebarButton = ({
 }) => (
   <button
     onClick={onClick}
-    className="flex w-full items-center gap-3 rounded-md px-2.5 py-2 text-[13px] font-medium transition-colors"
+    className="flex h-[36px] w-full items-center gap-[10px] rounded-[6px] px-[10px] text-[13px] font-medium transition-colors"
     style={{
       color: active ? 'var(--text-primary)' : 'var(--text-secondary)',
       background: active ? 'var(--bg-overlay)' : 'transparent',
@@ -216,7 +216,7 @@ const SidebarButton = ({
         <span className="flex-1 text-left">{label}</span>
         {shortcut && (
           <kbd
-            className="text-[10px] font-normal"
+            className="text-[11px] font-normal"
             style={{ color: 'var(--text-muted)' }}
           >
             {shortcut}
