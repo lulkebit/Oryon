@@ -119,3 +119,10 @@ pub async fn get_engine_status(engine: State<'_, Engine>) -> Result<EngineStatus
 pub fn get_hardware_info() -> hardware::HardwareInfo {
     hardware::detect()
 }
+
+#[tauri::command]
+pub fn get_process_stats(
+    monitor: State<'_, hardware::SystemMonitor>,
+) -> hardware::ProcessStats {
+    monitor.get_stats()
+}

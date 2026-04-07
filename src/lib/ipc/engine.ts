@@ -60,6 +60,27 @@ export async function getHardwareInfo(): Promise<HardwareInfo | null> {
   return invoke('get_hardware_info')
 }
 
+export interface ProcessStats {
+  appCpuPercent: number
+  appMemoryBytes: number
+  systemCpuPercent: number
+  systemMemoryUsed: number
+  systemMemoryTotal: number
+}
+
+export async function getProcessStats(): Promise<ProcessStats | null> {
+  if (!isTauri) return null
+  const { invoke } = await import('@tauri-apps/api/core')
+  return invoke('get_process_stats')
+}
+
+export async function readFileText(
+  path: string
+): Promise<{ filename: string; content: string; size: number }> {
+  const { invoke } = await import('@tauri-apps/api/core')
+  return invoke('read_file_text', { path })
+}
+
 export async function pickModelFile(): Promise<string | null> {
   if (!isTauri) return null
   const { open } = await import('@tauri-apps/plugin-dialog')

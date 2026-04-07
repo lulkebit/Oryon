@@ -1,5 +1,6 @@
 import { useEffect } from 'react'
 import { useGlobalShortcuts } from '@/hooks/useGlobalShortcuts'
+import { ErrorBoundary } from '@/components/shared/ErrorBoundary'
 import { Titlebar } from '@/components/titlebar/Titlebar'
 import { Sidebar } from '@/components/sidebar'
 import { ChatView } from '@/components/chat'
@@ -38,14 +39,16 @@ export const App = () => {
           className="flex flex-1 flex-col overflow-hidden"
           style={{ background: 'var(--bg-base)' }}
         >
-          {activeView === 'chat' && <ChatView />}
-          {activeView === 'models' && <ModelHubView />}
-          {activeView === 'settings' && <SettingsView />}
-          {activeView === 'agents' && (
-            <AgentConfigView
-              onBack={() => useUiStore.getState().setActiveView('chat')}
-            />
-          )}
+          <ErrorBoundary fallbackTitle="View failed to load">
+            {activeView === 'chat' && <ChatView />}
+            {activeView === 'models' && <ModelHubView />}
+            {activeView === 'settings' && <SettingsView />}
+            {activeView === 'agents' && (
+              <AgentConfigView
+                onBack={() => useUiStore.getState().setActiveView('chat')}
+              />
+            )}
+          </ErrorBoundary>
         </main>
       </div>
     </div>

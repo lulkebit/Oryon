@@ -9,12 +9,18 @@ import {
   Heart,
   ArrowRight2,
   ArrowLeft2,
+  Pause,
+  Play,
+  Activity,
+  MonitorMobbile,
 } from 'iconsax-react'
 import { useUiStore } from '@/stores/uiStore'
 import { useModelHubStore } from '@/stores/modelHubStore'
 import type { FeaturedCategory } from '@/stores/modelHubStore'
 import { useEngineStore } from '@/stores/engineStore'
 import type { HfModelResult, GgufFile, StoredModel } from '@/lib/ipc/hub'
+import type { ProcessStats, HardwareInfo } from '@/lib/ipc/engine'
+import { getProcessStats, getHardwareInfo } from '@/lib/ipc/engine'
 
 function formatBytes(bytes: number): string {
   if (bytes === 0) return '—'
@@ -122,6 +128,8 @@ export const ModelHubView = () => {
     setTab,
     featured,
     startDownload,
+    pauseActiveDownload,
+    resumeActiveDownload,
     cancelActiveDownload,
     removeModel,
     loadDownloaded,
@@ -205,6 +213,11 @@ export const ModelHubView = () => {
           onClick={() => setTab('downloaded')}
           label={`My Models (${downloadedModels.length})`}
         />
+        <TabButton
+          active={tab === 'usage'}
+          onClick={() => setTab('usage')}
+          label="Usage"
+        />
       </div>
 
       {tab === 'explore' && (
@@ -217,6 +230,8 @@ export const ModelHubView = () => {
           featured={featured}
           activeDownload={activeDownload}
           onDownload={startDownload}
+          onPause={pauseActiveDownload}
+          onResume={resumeActiveDownload}
           onCancelDownload={cancelActiveDownload}
           error={error}
         />
@@ -225,6 +240,8 @@ export const ModelHubView = () => {
       {tab === 'downloaded' && (
         <DownloadedTab models={downloadedModels} onDelete={removeModel} />
       )}
+
+      {tab === 'usage' && <UsageTab />}
     </div>
   )
 }
@@ -268,6 +285,8 @@ function ExploreTab({
   featured,
   activeDownload,
   onDownload,
+  onPause,
+  onResume,
   onCancelDownload,
   error,
 }: {
@@ -280,13 +299,12 @@ function ExploreTab({
   activeDownload: {
     repoId: string
     filename: string
-    progress: {
-      downloaded: number
-      total: number
-      speedBps: number
-    } | null
+    progress: { downloaded: number; total: number; speedBps: number } | null
+    isPaused: boolean
   } | null
   onDownload: (repoId: string, filename: string) => void
+  onPause: () => void
+  onResume: () => void
   onCancelDownload: () => void
   error: string | null
 }) {
@@ -310,7 +328,7 @@ function ExploreTab({
             type="text"
             value={query}
             onChange={(e) => onQueryChange(e.target.value)}
-            placeholder="Search GGUF models on Hugging Face…"
+            placeholder="Search GGUF models on Hugging Face..."
             className="flex-1 bg-transparent outline-none"
             style={{ fontSize: '13px', color: 'var(--text-primary)' }}
           />
@@ -344,7 +362,12 @@ function ExploreTab({
       )}
 
       {activeDownload && (
-        <DownloadBanner download={activeDownload} onCancel={onCancelDownload} />
+        <DownloadBanner
+          download={activeDownload}
+          onPause={onPause}
+          onResume={onResume}
+          onCancel={onCancelDownload}
+        />
       )}
 
       {isSearchActive ? (
@@ -652,12 +675,7 @@ function BrowseModelCard({
         )}
       </div>
 
-      <div
-        style={{
-          padding: '0 16px 14px',
-          marginTop: 'auto',
-        }}
-      >
+      <div style={{ padding: '0 16px 14px', marginTop: 'auto' }}>
         {!expanded ? (
           <div className="flex" style={{ gap: '6px' }}>
             <button
@@ -683,9 +701,7 @@ function BrowseModelCard({
             </button>
             {recommended && (
               <button
-                onClick={() =>
-                  onDownload(model.id, recommended.filename)
-                }
+                onClick={() => onDownload(model.id, recommended.filename)}
                 disabled={!!activeDownload}
                 className="flex flex-1 items-center justify-center transition-colors"
                 style={{
@@ -822,7 +838,7 @@ function FileRow({
         }}
       >
         <DocumentDownload size={11} color="currentColor" />
-        {isDownloading ? 'Downloading…' : 'Download'}
+        {isDownloading ? 'Downloading...' : 'Download'}
       </button>
     </div>
   )
@@ -1079,17 +1095,18 @@ function Spinner() {
 
 function DownloadBanner({
   download,
+  onPause,
+  onResume,
   onCancel,
 }: {
   download: {
     repoId: string
     filename: string
-    progress: {
-      downloaded: number
-      total: number
-      speedBps: number
-    } | null
+    progress: { downloaded: number; total: number; speedBps: number } | null
+    isPaused: boolean
   }
+  onPause: () => void
+  onResume: () => void
   onCancel: () => void
 }) {
   const p = download.progress
@@ -1103,7 +1120,7 @@ function DownloadBanner({
         padding: '12px 16px',
         borderRadius: '10px',
         background: 'var(--bg-elevated)',
-        border: '1px solid var(--accent)',
+        border: `1px solid ${download.isPaused ? 'var(--border-default)' : 'var(--accent)'}`,
       }}
     >
       <div
@@ -1121,7 +1138,7 @@ function DownloadBanner({
               whiteSpace: 'nowrap',
             }}
           >
-            Downloading {download.filename}
+            {download.isPaused ? 'Paused' : 'Downloading'} {download.filename}
           </p>
           {p && (
             <p
@@ -1131,30 +1148,76 @@ function DownloadBanner({
                 marginTop: '2px',
               }}
             >
-              {formatBytes(p.downloaded)} / {formatBytes(p.total)} ·{' '}
-              {formatSpeed(p.speedBps)} · {percent}%
+              {formatBytes(p.downloaded)} / {formatBytes(p.total)}
+              {!download.isPaused && (
+                <> · {formatSpeed(p.speedBps)} · {percent}%</>
+              )}
+              {download.isPaused && <> · {percent}%</>}
             </p>
           )}
         </div>
-        <button
-          onClick={onCancel}
-          className="flex items-center justify-center transition-colors"
-          style={{
-            width: '28px',
-            height: '28px',
-            borderRadius: '6px',
-            color: 'var(--text-muted)',
-          }}
-          onMouseEnter={(e) => {
-            e.currentTarget.style.background = 'var(--bg-overlay)'
-          }}
-          onMouseLeave={(e) => {
-            e.currentTarget.style.background = 'transparent'
-          }}
-          aria-label="Cancel download"
-        >
-          <CloseCircle size={16} color="currentColor" />
-        </button>
+        <div className="flex items-center" style={{ gap: '4px' }}>
+          {download.isPaused ? (
+            <button
+              onClick={onResume}
+              className="flex items-center justify-center transition-colors"
+              style={{
+                width: '28px',
+                height: '28px',
+                borderRadius: '6px',
+                color: 'var(--accent)',
+              }}
+              onMouseEnter={(e) => {
+                e.currentTarget.style.background = 'var(--bg-overlay)'
+              }}
+              onMouseLeave={(e) => {
+                e.currentTarget.style.background = 'transparent'
+              }}
+              aria-label="Resume download"
+            >
+              <Play size={16} color="currentColor" variant="Bold" />
+            </button>
+          ) : (
+            <button
+              onClick={onPause}
+              className="flex items-center justify-center transition-colors"
+              style={{
+                width: '28px',
+                height: '28px',
+                borderRadius: '6px',
+                color: 'var(--text-muted)',
+              }}
+              onMouseEnter={(e) => {
+                e.currentTarget.style.background = 'var(--bg-overlay)'
+              }}
+              onMouseLeave={(e) => {
+                e.currentTarget.style.background = 'transparent'
+              }}
+              aria-label="Pause download"
+            >
+              <Pause size={16} color="currentColor" variant="Bold" />
+            </button>
+          )}
+          <button
+            onClick={onCancel}
+            className="flex items-center justify-center transition-colors"
+            style={{
+              width: '28px',
+              height: '28px',
+              borderRadius: '6px',
+              color: 'var(--text-muted)',
+            }}
+            onMouseEnter={(e) => {
+              e.currentTarget.style.background = 'var(--bg-overlay)'
+            }}
+            onMouseLeave={(e) => {
+              e.currentTarget.style.background = 'transparent'
+            }}
+            aria-label="Cancel download"
+          >
+            <CloseCircle size={16} color="currentColor" />
+          </button>
+        </div>
       </div>
       <div
         style={{
@@ -1169,7 +1232,7 @@ function DownloadBanner({
             height: '100%',
             width: `${percent}%`,
             borderRadius: '2px',
-            background: 'var(--accent)',
+            background: download.isPaused ? 'var(--text-muted)' : 'var(--accent)',
             transition: 'width 300ms ease',
           }}
         />
@@ -1290,7 +1353,7 @@ function DownloadedTab({
                       opacity: loading ? 0.5 : 1,
                     }}
                   >
-                    {loading ? 'Loading…' : 'Load'}
+                    {loading ? 'Loading...' : 'Load'}
                   </button>
                 )}
                 {isLoaded && (
@@ -1336,6 +1399,326 @@ function DownloadedTab({
           )
         })}
       </div>
+    </div>
+  )
+}
+
+/* ─── Usage Tab ───────────────────────────────────── */
+
+const MAX_DATA_POINTS = 60
+
+function Sparkline({
+  data,
+  maxVal,
+  color,
+  height = 48,
+}: {
+  data: number[]
+  maxVal: number
+  color: string
+  height?: number
+}) {
+  const width = 200
+  if (data.length < 2) {
+    return (
+      <svg width={width} height={height} style={{ display: 'block' }}>
+        <line
+          x1={0}
+          y1={height - 1}
+          x2={width}
+          y2={height - 1}
+          stroke={`${color}30`}
+          strokeWidth={1}
+        />
+      </svg>
+    )
+  }
+
+  const safeMax = maxVal > 0 ? maxVal : 1
+  const pts = data.map((v, i) => {
+    const x = (i / (data.length - 1)) * width
+    const y = height - (Math.min(v, safeMax) / safeMax) * (height - 4) - 2
+    return { x, y }
+  })
+
+  const line = pts.map((p) => `${p.x},${p.y}`).join(' ')
+  const area = `0,${height} ${line} ${width},${height}`
+
+  return (
+    <svg width={width} height={height} style={{ display: 'block' }}>
+      <defs>
+        <linearGradient id={`grad-${color}`} x1="0" y1="0" x2="0" y2="1">
+          <stop offset="0%" stopColor={color} stopOpacity="0.25" />
+          <stop offset="100%" stopColor={color} stopOpacity="0.02" />
+        </linearGradient>
+      </defs>
+      <polygon points={area} fill={`url(#grad-${color})`} />
+      <polyline
+        points={line}
+        fill="none"
+        stroke={color}
+        strokeWidth="1.5"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+      {pts.length > 0 && (
+        <circle
+          cx={pts[pts.length - 1].x}
+          cy={pts[pts.length - 1].y}
+          r={2.5}
+          fill={color}
+        />
+      )}
+    </svg>
+  )
+}
+
+function UsageTab() {
+  const [history, setHistory] = useState<ProcessStats[]>([])
+  const [hardware, setHardware] = useState<HardwareInfo | null>(null)
+  const { loadedModel } = useEngineStore()
+  const intervalRef = useRef<ReturnType<typeof setInterval>>(undefined)
+
+  useEffect(() => {
+    getHardwareInfo().then((hw) => {
+      if (hw) setHardware(hw)
+    })
+  }, [])
+
+  useEffect(() => {
+    const poll = async () => {
+      const stats = await getProcessStats()
+      if (stats) {
+        setHistory((prev) => {
+          const next = [...prev, stats]
+          return next.length > MAX_DATA_POINTS
+            ? next.slice(next.length - MAX_DATA_POINTS)
+            : next
+        })
+      }
+    }
+
+    poll()
+    intervalRef.current = setInterval(poll, 2000)
+    return () => {
+      if (intervalRef.current) clearInterval(intervalRef.current)
+    }
+  }, [])
+
+  const latest = history[history.length - 1]
+  const cpuData = history.map((s) => s.systemCpuPercent)
+  const memData = history.map((s) => s.systemMemoryUsed)
+  const appMemData = history.map((s) => s.appMemoryBytes)
+  const appCpuData = history.map((s) => s.appCpuPercent)
+
+  return (
+    <div className="flex-1 overflow-y-auto" style={{ padding: '24px' }}>
+      <div style={{ maxWidth: '640px', margin: '0 auto' }}>
+        {/* System Header */}
+        {hardware && (
+          <div
+            className="border"
+            style={{
+              padding: '16px 20px',
+              borderRadius: '12px',
+              borderColor: 'var(--border-subtle)',
+              background: 'var(--bg-surface)',
+              marginBottom: '16px',
+            }}
+          >
+            <div className="flex items-center" style={{ gap: '10px', marginBottom: '8px' }}>
+              <MonitorMobbile size={18} color="var(--accent)" />
+              <span
+                style={{
+                  fontSize: '13px',
+                  fontWeight: 600,
+                  color: 'var(--text-primary)',
+                }}
+              >
+                System
+              </span>
+            </div>
+            <div
+              className="flex flex-wrap"
+              style={{ gap: '16px', fontSize: '12px', color: 'var(--text-muted)' }}
+            >
+              <span>{hardware.cpuName || 'Unknown CPU'}</span>
+              <span>{hardware.cpuCores} cores</span>
+              <span>{formatBytes(hardware.totalRam)} RAM</span>
+              <span>{hardware.os} {hardware.arch}</span>
+              {hardware.metalSupport && (
+                <span style={{ color: 'var(--accent)' }}>Metal</span>
+              )}
+              {hardware.cudaSupport && (
+                <span style={{ color: 'var(--accent)' }}>CUDA</span>
+              )}
+            </div>
+          </div>
+        )}
+
+        {/* Metric Cards */}
+        <div
+          style={{
+            display: 'grid',
+            gridTemplateColumns: 'repeat(2, 1fr)',
+            gap: '12px',
+            marginBottom: '16px',
+          }}
+        >
+          <MetricCard
+            label="System CPU"
+            value={latest ? `${latest.systemCpuPercent.toFixed(1)}%` : '--'}
+            data={cpuData}
+            maxVal={100}
+            color="#3b82f6"
+          />
+          <MetricCard
+            label="System RAM"
+            value={
+              latest
+                ? `${formatBytes(latest.systemMemoryUsed)} / ${formatBytes(latest.systemMemoryTotal)}`
+                : '--'
+            }
+            data={memData}
+            maxVal={hardware?.totalRam ?? 1}
+            color="#8b5cf6"
+          />
+          <MetricCard
+            label="App CPU"
+            value={latest ? `${latest.appCpuPercent.toFixed(1)}%` : '--'}
+            data={appCpuData}
+            maxVal={Math.max(100, ...appCpuData)}
+            color="#06b6d4"
+          />
+          <MetricCard
+            label="App Memory"
+            value={latest ? formatBytes(latest.appMemoryBytes) : '--'}
+            data={appMemData}
+            maxVal={Math.max(1, ...appMemData) * 1.2}
+            color="#22c55e"
+          />
+        </div>
+
+        {/* Loaded Model */}
+        <div
+          className="border"
+          style={{
+            padding: '16px 20px',
+            borderRadius: '12px',
+            borderColor: 'var(--border-subtle)',
+            background: 'var(--bg-surface)',
+          }}
+        >
+          <div className="flex items-center" style={{ gap: '10px', marginBottom: '10px' }}>
+            <Cpu size={18} color="var(--accent)" />
+            <span
+              style={{
+                fontSize: '13px',
+                fontWeight: 600,
+                color: 'var(--text-primary)',
+              }}
+            >
+              Loaded Model
+            </span>
+          </div>
+          {loadedModel ? (
+            <div style={{ fontSize: '12px' }}>
+              <div className="flex items-center" style={{ gap: '8px', marginBottom: '6px' }}>
+                <span
+                  style={{
+                    fontWeight: 600,
+                    color: 'var(--text-primary)',
+                    fontFamily: 'var(--font-mono)',
+                  }}
+                >
+                  {loadedModel.modelId}
+                </span>
+                <span
+                  style={{
+                    padding: '2px 8px',
+                    borderRadius: '4px',
+                    fontSize: '10px',
+                    fontWeight: 600,
+                    background: 'var(--accent-muted)',
+                    color: 'var(--accent)',
+                  }}
+                >
+                  Active
+                </span>
+              </div>
+              <div style={{ color: 'var(--text-muted)' }}>
+                <span>Size: {formatBytes(loadedModel.size)}</span>
+              </div>
+            </div>
+          ) : (
+            <p style={{ fontSize: '12px', color: 'var(--text-muted)' }}>
+              No model loaded. Load a model from the My Models tab to see usage.
+            </p>
+          )}
+        </div>
+
+        {history.length < 3 && (
+          <p
+            style={{
+              marginTop: '24px',
+              textAlign: 'center',
+              fontSize: '11px',
+              color: 'var(--text-muted)',
+              opacity: 0.6,
+            }}
+          >
+            Collecting data... Graphs update every 2 seconds.
+          </p>
+        )}
+      </div>
+    </div>
+  )
+}
+
+function MetricCard({
+  label,
+  value,
+  data,
+  maxVal,
+  color,
+}: {
+  label: string
+  value: string
+  data: number[]
+  maxVal: number
+  color: string
+}) {
+  return (
+    <div
+      className="border"
+      style={{
+        padding: '14px 16px',
+        borderRadius: '12px',
+        borderColor: 'var(--border-subtle)',
+        background: 'var(--bg-surface)',
+        overflow: 'hidden',
+      }}
+    >
+      <div className="flex items-center justify-between" style={{ marginBottom: '4px' }}>
+        <span style={{ fontSize: '11px', fontWeight: 500, color: 'var(--text-muted)' }}>
+          {label}
+        </span>
+        <Activity size={12} color={color} />
+      </div>
+      <p
+        style={{
+          fontSize: '18px',
+          fontWeight: 700,
+          color: 'var(--text-primary)',
+          fontFamily: 'var(--font-mono)',
+          letterSpacing: '-0.02em',
+          marginBottom: '8px',
+          lineHeight: '24px',
+        }}
+      >
+        {value}
+      </p>
+      <Sparkline data={data} maxVal={maxVal} color={color} />
     </div>
   )
 }

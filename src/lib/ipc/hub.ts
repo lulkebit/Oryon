@@ -50,6 +50,12 @@ export async function downloadModel(
   await invoke('download_model', { repoId, filename })
 }
 
+export async function pauseDownload(): Promise<void> {
+  if (!isTauri) return
+  const { invoke } = await import('@tauri-apps/api/core')
+  await invoke('pause_download')
+}
+
 export async function cancelDownload(): Promise<void> {
   if (!isTauri) return
   const { invoke } = await import('@tauri-apps/api/core')

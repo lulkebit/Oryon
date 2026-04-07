@@ -16,6 +16,7 @@ pub struct AppState {
 pub fn run() {
     let inference_engine =
         engine::Engine::spawn().expect("failed to start inference engine");
+    let system_monitor = engine::hardware::SystemMonitor::new();
 
     tauri::Builder::default()
         .plugin(tauri_plugin_dialog::init())
@@ -48,6 +49,7 @@ pub fn run() {
             Ok(())
         })
         .manage(inference_engine)
+        .manage(system_monitor)
         .manage(commands::hub::DownloadState::new())
         .invoke_handler(tauri::generate_handler![
             commands::get_app_info,
@@ -55,6 +57,7 @@ pub fn run() {
             commands::set_theme,
             commands::get_setting,
             commands::set_setting,
+            commands::read_file_text,
             commands::list_workspaces,
             commands::create_workspace,
             commands::rename_workspace,
@@ -71,9 +74,11 @@ pub fn run() {
             commands::engine::stop_inference,
             commands::engine::get_engine_status,
             commands::engine::get_hardware_info,
+            commands::engine::get_process_stats,
             commands::hub::search_models,
             commands::hub::search_models_featured,
             commands::hub::download_model,
+            commands::hub::pause_download,
             commands::hub::cancel_download,
             commands::hub::list_downloaded_models,
             commands::hub::delete_model,

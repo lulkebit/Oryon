@@ -4,6 +4,7 @@ use std::sync::Arc;
 
 use futures_util::StreamExt;
 use serde::Serialize;
+use sha2::{Digest, Sha256};
 use tauri::Emitter;
 use tokio::io::AsyncWriteExt;
 
@@ -24,8 +25,9 @@ pub async fn download_model(
     target_dir: &Path,
     download_id: &str,
     cancel: Arc<AtomicBool>,
+    paused: Arc<AtomicBool>,
     app_handle: tauri::AppHandle,
-) -> Result<PathBuf, String> {
+) -> Result<(PathBuf, String), String> {
     let url = hf_api::download_url(repo_id, filename);
     let target_path = target_dir.join(filename);
     let temp_path = target_dir.join(format!("{filename}.part"));
@@ -95,6 +97,21 @@ pub async fn download_model(
 
     while let Some(chunk) = stream.next().await {
         if cancel.load(Ordering::SeqCst) {
+            file.flush().await.ok();
+            drop(file);
+
+            if paused.load(Ordering::SeqCst) {
+                let _ = app_handle.emit(
+                    "download:paused",
+                    serde_json::json!({
+                        "downloadId": download_id,
+                        "downloaded": downloaded,
+                        "total": total,
+                    }),
+                );
+                return Err("Download paused".to_string());
+            }
+
             let _ = app_handle.emit(
                 "download:cancelled",
                 serde_json::json!({ "downloadId": download_id }),
@@ -139,14 +156,36 @@ pub async fn download_model(
         .await
         .map_err(|e| format!("Failed to rename completed download: {e}"))?;
 
+    let hash_path = target_path.clone();
+    let sha256 = tokio::task::spawn_blocking(move || {
+        use std::io::Read;
+        let mut f =
+            std::fs::File::open(&hash_path).map_err(|e| format!("Hash open error: {e}"))?;
+        let mut hasher = Sha256::new();
+        let mut buf = [0u8; 65536];
+        loop {
+            let n = f.read(&mut buf).map_err(|e| format!("Hash read error: {e}"))?;
+            if n == 0 {
+                break;
+            }
+            hasher.update(&buf[..n]);
+        }
+        Ok::<String, String>(format!("{:x}", hasher.finalize()))
+    })
+    .await
+    .map_err(|e| format!("Hash task error: {e}"))??;
+
+    log::info!("Download complete: {filename} sha256={sha256}");
+
     let _ = app_handle.emit(
         "download:completed",
         serde_json::json!({
             "downloadId": download_id,
             "path": target_path.to_string_lossy(),
             "filename": filename,
+            "sha256": sha256,
         }),
     );
 
-    Ok(target_path)
+    Ok((target_path, sha256))
 }

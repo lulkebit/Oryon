@@ -2,7 +2,9 @@ import { useCallback, useRef, useState } from 'react'
 import { Add, Box1, Setting2, FolderOpen, People } from 'iconsax-react'
 import { useUiStore } from '@/stores/uiStore'
 import { useWorkspaceStore } from '@/stores/workspaceStore'
+import { useChatStore } from '@/stores/chatStore'
 import { SidebarItem } from './SidebarItem'
+import type { BadgeType } from './SidebarItem'
 import {
   ContextMenu,
   type ContextMenuItem,
@@ -36,8 +38,18 @@ export const Sidebar = () => {
     removeChat,
     setActiveChat,
   } = useWorkspaceStore()
+  const { streamingChatId, errorChatId } = useChatStore()
   const resizing = useRef(false)
   const [contextMenu, setContextMenu] = useState<ContextMenuState | null>(null)
+
+  const getBadge = useCallback(
+    (chatId: string): BadgeType => {
+      if (chatId === streamingChatId) return 'running'
+      if (chatId === errorChatId) return 'error'
+      return null
+    },
+    [streamingChatId, errorChatId]
+  )
 
   const handleResizeStart = useCallback(
     (e: React.MouseEvent) => {
@@ -264,6 +276,7 @@ export const Sidebar = () => {
                     label={chat.title}
                     active={chat.id === activeChatId}
                     collapsed={sidebarCollapsed}
+                    badge={getBadge(chat.id)}
                     onClick={() => {
                       setActiveChat(chat.id)
                       setActiveView('chat')

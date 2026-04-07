@@ -10,6 +10,7 @@ use crate::AppState;
 
 pub struct DownloadState {
     pub cancel: Arc<AtomicBool>,
+    pub paused: Arc<AtomicBool>,
     pub active_id: Mutex<Option<String>>,
 }
 
@@ -17,6 +18,7 @@ impl DownloadState {
     pub fn new() -> Self {
         Self {
             cancel: Arc::new(AtomicBool::new(false)),
+            paused: Arc::new(AtomicBool::new(false)),
             active_id: Mutex::new(None),
         }
     }
@@ -44,6 +46,7 @@ pub async fn download_model(
 ) -> Result<(), String> {
     let download_id = uuid::Uuid::now_v7().to_string();
     dl_state.cancel.store(false, Ordering::SeqCst);
+    dl_state.paused.store(false, Ordering::SeqCst);
     *dl_state.active_id.lock().await = Some(download_id.clone());
 
     let models_dir = app_handle
@@ -53,44 +56,64 @@ pub async fn download_model(
         .join("models");
 
     let cancel = dl_state.cancel.clone();
+    let paused = dl_state.paused.clone();
 
-    let target_path = download::download_model(
+    let result = download::download_model(
         &repo_id,
         &filename,
         &models_dir,
         &download_id,
         cancel,
+        paused,
         app_handle.clone(),
     )
-    .await?;
+    .await;
 
-    let file_size = std::fs::metadata(&target_path)
-        .map(|m| m.len())
-        .unwrap_or(0);
+    match result {
+        Ok((target_path, sha256)) => {
+            let file_size = std::fs::metadata(&target_path)
+                .map(|m| m.len())
+                .unwrap_or(0);
 
-    let model_id = filename
-        .strip_suffix(".gguf")
-        .unwrap_or(&filename)
-        .to_string();
+            let model_id = filename
+                .strip_suffix(".gguf")
+                .unwrap_or(&filename)
+                .to_string();
 
-    {
-        let db = app_state.db.lock().map_err(|e| e.to_string())?;
-        db.save_model(
-            &model_id,
-            &filename,
-            &repo_id,
-            file_size,
-            &target_path.to_string_lossy(),
-        )
-        .map_err(|e| e.to_string())?;
+            {
+                let db = app_state.db.lock().map_err(|e| e.to_string())?;
+                db.save_model(
+                    &model_id,
+                    &filename,
+                    &repo_id,
+                    file_size,
+                    &target_path.to_string_lossy(),
+                    Some(&sha256),
+                )
+                .map_err(|e| e.to_string())?;
+            }
+
+            *dl_state.active_id.lock().await = None;
+            Ok(())
+        }
+        Err(e) if e.contains("paused") => Err(e),
+        Err(e) => {
+            *dl_state.active_id.lock().await = None;
+            Err(e)
+        }
     }
+}
 
-    *dl_state.active_id.lock().await = None;
+#[tauri::command]
+pub async fn pause_download(dl_state: State<'_, DownloadState>) -> Result<(), String> {
+    dl_state.paused.store(true, Ordering::SeqCst);
+    dl_state.cancel.store(true, Ordering::SeqCst);
     Ok(())
 }
 
 #[tauri::command]
 pub async fn cancel_download(dl_state: State<'_, DownloadState>) -> Result<(), String> {
+    dl_state.paused.store(false, Ordering::SeqCst);
     dl_state.cancel.store(true, Ordering::SeqCst);
     Ok(())
 }

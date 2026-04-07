@@ -1,12 +1,19 @@
 import { Message } from 'iconsax-react'
 
+export type BadgeType = 'running' | 'error' | null
+
 interface SidebarItemProps {
   label: string
   active: boolean
   collapsed: boolean
   onClick: () => void
   onContextMenu?: (e: React.MouseEvent) => void
-  hasActivity?: boolean
+  badge?: BadgeType
+}
+
+const BADGE_COLORS: Record<string, string> = {
+  running: 'var(--accent)',
+  error: 'var(--status-error)',
 }
 
 export const SidebarItem = ({
@@ -15,7 +22,7 @@ export const SidebarItem = ({
   collapsed,
   onClick,
   onContextMenu,
-  hasActivity,
+  badge,
 }: SidebarItemProps) => (
   <button
     onClick={onClick}
@@ -54,15 +61,24 @@ export const SidebarItem = ({
     {!collapsed && (
       <span className="flex-1 truncate text-left">{label}</span>
     )}
-    {hasActivity && (
+    {badge && (
       <div
         className="shrink-0 rounded-full"
         style={{
           width: '6px',
           height: '6px',
-          background: 'var(--status-running)',
+          background: BADGE_COLORS[badge] ?? 'var(--text-muted)',
+          animation: badge === 'running' ? 'pulse-badge 2s ease-in-out infinite' : undefined,
         }}
       />
+    )}
+    {badge === 'running' && (
+      <style>{`
+        @keyframes pulse-badge {
+          0%, 100% { opacity: 1; }
+          50% { opacity: 0.4; }
+        }
+      `}</style>
     )}
   </button>
 )

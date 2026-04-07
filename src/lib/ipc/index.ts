@@ -26,13 +26,16 @@ export {
   stopInference,
   getEngineStatus,
   getHardwareInfo,
+  getProcessStats,
+  readFileText,
   pickModelFile,
 } from './engine'
-export type { ModelInfo, EngineStatus, HardwareInfo } from './engine'
+export type { ModelInfo, EngineStatus, HardwareInfo, ProcessStats } from './engine'
 export {
   searchModels,
   searchModelsFeatured,
   downloadModel,
+  pauseDownload,
   cancelDownload,
   listDownloadedModels,
   deleteModel,

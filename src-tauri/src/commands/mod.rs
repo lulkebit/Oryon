@@ -53,3 +53,21 @@ pub fn set_setting(
     let db = state.db.lock().map_err(|e| e.to_string())?;
     db.set_setting(&key, &value).map_err(|e| e.to_string())
 }
+
+#[tauri::command]
+pub fn read_file_text(path: String) -> Result<serde_json::Value, String> {
+    let metadata =
+        std::fs::metadata(&path).map_err(|e| format!("Cannot access file: {e}"))?;
+    let content =
+        std::fs::read_to_string(&path).map_err(|e| format!("Cannot read file: {e}"))?;
+    let filename = std::path::Path::new(&path)
+        .file_name()
+        .map(|f| f.to_string_lossy().to_string())
+        .unwrap_or_default();
+
+    Ok(serde_json::json!({
+        "filename": filename,
+        "content": content,
+        "size": metadata.len(),
+    }))
+}

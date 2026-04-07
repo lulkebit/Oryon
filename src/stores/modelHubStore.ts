@@ -5,6 +5,7 @@ import {
   searchModels,
   searchModelsFeatured,
   downloadModel,
+  pauseDownload,
   cancelDownload,
   listDownloadedModels,
   deleteModel,
@@ -21,6 +22,7 @@ interface ActiveDownload {
   repoId: string
   filename: string
   progress: DownloadProgress | null
+  isPaused: boolean
 }
 
 export interface FeaturedCategory {
@@ -71,13 +73,15 @@ const FEATURED_CATEGORIES: Omit<FeaturedCategory, 'results' | 'loading'>[] = [
   },
 ]
 
+export type HubTab = 'explore' | 'downloaded' | 'usage'
+
 interface ModelHubState {
   query: string
   searchResults: HfModelResult[]
   searching: boolean
   downloadedModels: StoredModel[]
   activeDownload: ActiveDownload | null
-  tab: 'explore' | 'downloaded'
+  tab: HubTab
   featured: FeaturedCategory[]
   featuredLoaded: boolean
   error: string | null
@@ -87,9 +91,11 @@ interface ModelHubState {
   loadFeatured: () => Promise<void>
   loadDownloaded: () => Promise<void>
   startDownload: (repoId: string, filename: string) => Promise<void>
+  pauseActiveDownload: () => Promise<void>
+  resumeActiveDownload: () => Promise<void>
   cancelActiveDownload: () => Promise<void>
   removeModel: (modelId: string) => Promise<void>
-  setTab: (tab: 'explore' | 'downloaded') => void
+  setTab: (tab: HubTab) => void
   updateDownloadProgress: (progress: DownloadProgress) => void
   onDownloadComplete: () => void
   onDownloadCancelled: () => void
@@ -97,6 +103,30 @@ interface ModelHubState {
 }
 
 let _dlListenersActive = false
+
+async function doDownload(
+  repoId: string,
+  filename: string,
+  set: (fn: (s: ModelHubState) => Partial<ModelHubState>) => void
+) {
+  try {
+    await downloadModel(repoId, filename)
+  } catch (e) {
+    const msg = String(e)
+    if (msg.includes('paused')) {
+      set((s) => ({
+        activeDownload: s.activeDownload
+          ? { ...s.activeDownload, isPaused: true }
+          : null,
+      }))
+      return
+    }
+    if (!msg.includes('cancelled')) {
+      set(() => ({ error: msg }))
+    }
+    set(() => ({ activeDownload: null }))
+  }
+}
 
 export const useModelHubStore = create<ModelHubState>((set, get) => ({
   query: '',
@@ -163,18 +193,24 @@ export const useModelHubStore = create<ModelHubState>((set, get) => ({
 
   startDownload: async (repoId, filename) => {
     set({
-      activeDownload: { repoId, filename, progress: null },
+      activeDownload: { repoId, filename, progress: null, isPaused: false },
       error: null,
     })
-    try {
-      await downloadModel(repoId, filename)
-    } catch (e) {
-      const msg = String(e)
-      if (!msg.includes('cancelled')) {
-        set({ error: msg })
-      }
-      set({ activeDownload: null })
-    }
+    await doDownload(repoId, filename, set)
+  },
+
+  pauseActiveDownload: async () => {
+    await pauseDownload()
+  },
+
+  resumeActiveDownload: async () => {
+    const dl = get().activeDownload
+    if (!dl) return
+    set({
+      activeDownload: { ...dl, isPaused: false },
+      error: null,
+    })
+    await doDownload(dl.repoId, dl.filename, set)
   },
 
   cancelActiveDownload: async () => {
@@ -224,5 +260,19 @@ export const useModelHubStore = create<ModelHubState>((set, get) => ({
     await listen('download:cancelled', () => {
       useModelHubStore.getState().onDownloadCancelled()
     })
+    await listen<{ downloaded: number; total: number }>(
+      'download:paused',
+      (event) => {
+        const store = useModelHubStore.getState()
+        const dl = store.activeDownload
+        if (dl && dl.progress) {
+          store.updateDownloadProgress({
+            ...dl.progress,
+            downloaded: event.payload.downloaded,
+            speedBps: 0,
+          })
+        }
+      }
+    )
   },
 }))

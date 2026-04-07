@@ -309,6 +309,7 @@ impl Database {
         hf_repo_id: &str,
         file_size: u64,
         storage_path: &str,
+        sha256: Option<&str>,
     ) -> Result<(), DbError> {
         let now = chrono::Utc::now().to_rfc3339();
         let name = filename
@@ -316,9 +317,9 @@ impl Database {
             .unwrap_or(filename)
             .to_string();
         self.conn.execute(
-            "INSERT OR REPLACE INTO models (id, name, filename, hf_repo_id, file_size, storage_path, downloaded_at)
-             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7)",
-            rusqlite::params![model_id, name, filename, hf_repo_id, file_size as i64, storage_path, now],
+            "INSERT OR REPLACE INTO models (id, name, filename, hf_repo_id, file_size, storage_path, sha256, downloaded_at)
+             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8)",
+            rusqlite::params![model_id, name, filename, hf_repo_id, file_size as i64, storage_path, sha256, now],
         )?;
         Ok(())
     }

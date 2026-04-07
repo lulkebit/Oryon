@@ -55,6 +55,7 @@ interface ChatState {
   messages: Message[]
   currentChatId: string | null
   streamingChatId: string | null
+  errorChatId: string | null
   isStreaming: boolean
   streamingContent: string
   loading: boolean
@@ -77,6 +78,7 @@ export const useChatStore = create<ChatState>((set, get) => ({
   messages: [],
   currentChatId: null,
   streamingChatId: null,
+  errorChatId: null,
   isStreaming: false,
   streamingContent: '',
   loading: false,
@@ -96,6 +98,9 @@ export const useChatStore = create<ChatState>((set, get) => ({
 
   loadMessages: async (chatId) => {
     get().setCurrentChat(chatId)
+    if (get().errorChatId === chatId) {
+      set({ errorChatId: null })
+    }
     set({ loading: true, messages: [] })
 
     try {
@@ -266,6 +271,7 @@ export const useChatStore = create<ChatState>((set, get) => ({
         isStreaming: false,
         streamingContent: '',
         streamingChatId: null,
+        errorChatId: chatId,
         activeToolCalls: [],
       }))
     } else {
@@ -273,6 +279,7 @@ export const useChatStore = create<ChatState>((set, get) => ({
         isStreaming: false,
         streamingContent: '',
         streamingChatId: null,
+        errorChatId: chatId,
         activeToolCalls: [],
       })
     }
