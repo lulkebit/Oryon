@@ -2,6 +2,7 @@ mod commands;
 mod db;
 mod engine;
 mod hub;
+pub mod tools;
 
 use db::Database;
 use std::sync::Mutex;
@@ -72,6 +73,8 @@ pub fn run() {
             commands::hub::cancel_download,
             commands::hub::list_downloaded_models,
             commands::hub::delete_model,
+            commands::tools::execute_tool,
+            commands::tools::list_available_tools,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

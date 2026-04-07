@@ -72,6 +72,7 @@ enum Cmd {
         messages: Vec<(String, String)>,
         params: SamplingParams,
         app_handle: tauri::AppHandle,
+        workspace_path: Option<String>,
     },
     Status {
         resp: Resp<EngineStatus>,
@@ -155,6 +156,7 @@ impl Engine {
         messages: Vec<(String, String)>,
         params: SamplingParams,
         app_handle: tauri::AppHandle,
+        workspace_path: Option<String>,
     ) -> Result<(), String> {
         self.cancel.store(false, Ordering::SeqCst);
         self.tx
@@ -163,6 +165,7 @@ impl Engine {
                 messages,
                 params,
                 app_handle,
+                workspace_path,
             })
             .map_err(|_| "Engine thread disconnected".to_string())
     }
@@ -237,38 +240,21 @@ fn engine_loop(rx: mpsc::Receiver<Cmd>, cancel: Arc<AtomicBool>, generating: Arc
                 messages,
                 params,
                 app_handle,
+                workspace_path,
             } => {
                 generating.store(true, Ordering::SeqCst);
 
                 if let Some((ref model, _)) = loaded {
-                    match run_inference(
+                    run_agentic_loop(
                         &backend,
                         model,
-                        &messages,
+                        messages,
                         &params,
                         &cancel,
                         &chat_id,
                         &app_handle,
-                    ) {
-                        Ok(content) => {
-                            let _ = app_handle.emit(
-                                "chat:complete",
-                                serde_json::json!({
-                                    "chatId": chat_id,
-                                    "content": content,
-                                }),
-                            );
-                        }
-                        Err(e) => {
-                            let _ = app_handle.emit(
-                                "chat:error",
-                                serde_json::json!({
-                                    "chatId": chat_id,
-                                    "error": e,
-                                }),
-                            );
-                        }
-                    }
+                        workspace_path.as_deref(),
+                    );
                 } else {
                     let _ = app_handle.emit(
                         "chat:error",
@@ -314,6 +300,118 @@ const CONTROL_PATTERNS: &[&str] = &[
     "<|assistant|>",
 ];
 
+const MAX_TOOL_ROUNDS: usize = 10;
+
+fn run_agentic_loop(
+    backend: &LlamaBackend,
+    model: &LlamaModel,
+    initial_messages: Vec<(String, String)>,
+    params: &SamplingParams,
+    cancel: &AtomicBool,
+    chat_id: &str,
+    app_handle: &tauri::AppHandle,
+    workspace: Option<&str>,
+) {
+    let mut messages = initial_messages;
+    let mut total_output = String::new();
+
+    for round in 0..MAX_TOOL_ROUNDS {
+        match run_inference(backend, model, &messages, params, cancel, chat_id, app_handle, workspace) {
+            Ok(content) => {
+                if let Some(tool_call) = extract_tool_call(&content) {
+                    let text_before = content
+                        .find("<tool_call>")
+                        .map(|p| content[..p].to_string())
+                        .unwrap_or_default();
+
+                    let text_before = strip_control_tokens(&text_before);
+                    if !text_before.is_empty() {
+                        total_output.push_str(&text_before);
+                        total_output.push('\n');
+                    }
+
+                    if let Some(ws) = workspace {
+                        let _ = app_handle.emit(
+                            "tool:call",
+                            serde_json::json!({
+                                "chatId": chat_id,
+                                "round": round,
+                                "tool": tool_call,
+                            }),
+                        );
+
+                        let result = crate::tools::executor::execute(&tool_call, ws);
+
+                        let _ = app_handle.emit(
+                            "tool:result",
+                            serde_json::json!({
+                                "chatId": chat_id,
+                                "round": round,
+                                "result": result,
+                            }),
+                        );
+
+                        messages.push((
+                            "assistant".to_string(),
+                            format!(
+                                "{text_before}\n<tool_call>\n{}\n</tool_call>",
+                                serde_json::to_string(&tool_call).unwrap_or_default()
+                            ),
+                        ));
+                        messages.push((
+                            "tool".to_string(),
+                            format!("<tool_result>\n{}\n</tool_result>", result.output),
+                        ));
+
+                        continue;
+                    }
+                }
+
+                let clean = strip_control_tokens(&content);
+                total_output.push_str(&clean);
+
+                let _ = app_handle.emit(
+                    "chat:complete",
+                    serde_json::json!({
+                        "chatId": chat_id,
+                        "content": total_output.trim(),
+                    }),
+                );
+                return;
+            }
+            Err(e) => {
+                let _ = app_handle.emit(
+                    "chat:error",
+                    serde_json::json!({
+                        "chatId": chat_id,
+                        "error": e,
+                    }),
+                );
+                return;
+            }
+        }
+    }
+
+    total_output.push_str("\n\n[Reached maximum tool call rounds]");
+    let _ = app_handle.emit(
+        "chat:complete",
+        serde_json::json!({
+            "chatId": chat_id,
+            "content": total_output.trim(),
+        }),
+    );
+}
+
+fn extract_tool_call(content: &str) -> Option<crate::tools::ToolCall> {
+    let start = content.find("<tool_call>")?;
+    let end = content.find("</tool_call>")?;
+    if end <= start {
+        return None;
+    }
+    let json_str = &content[start + "<tool_call>".len()..end].trim();
+    serde_json::from_str(json_str).ok()
+}
+
 fn strip_control_tokens(s: &str) -> String {
     let mut result = s.to_string();
     for pat in CONTROL_PATTERNS {
@@ -338,31 +436,81 @@ fn contains_stop_sequence(output: &str) -> Option<usize> {
 
 // ── Prompt builder ───────────────────────────────────
 
-const SYSTEM_PROMPT: &str =
+const SYSTEM_PROMPT_BASE: &str =
     "You are a helpful AI coding assistant. Answer concisely and accurately.";
 
-fn build_prompt(model: &LlamaModel, messages: &[(String, String)]) -> String {
-    if let Ok(prompt) = build_prompt_native(model, messages) {
+const TOOL_PROMPT_SECTION: &str = r#"
+
+You have access to the following tools:
+
+- file_read: Read a file. Args: {"path": "relative/path", "offset": 1, "limit": 50}
+- file_write: Write/overwrite a file. Args: {"path": "relative/path", "content": "..."}
+- file_create: Create a new file. Args: {"path": "relative/path", "content": "..."}
+- file_patch: Search and replace in a file. Args: {"path": "relative/path", "old_string": "...", "new_string": "..."}
+- file_delete: Delete a file. Args: {"path": "relative/path"}
+- glob: Find files by pattern. Args: {"pattern": "**/*.rs"}
+- grep: Search file contents. Args: {"pattern": "regex", "glob": "*.ts"}
+- shell_exec: Run a shell command. Args: {"command": "ls -la"}
+- git_status: Show git status. Args: {}
+- git_diff: Show diffs. Args: {"staged": false}
+- git_commit: Commit changes. Args: {"message": "..."}
+- git_log: Show commit history. Args: {"count": 10}
+
+To use a tool, output:
+<tool_call>
+{"name": "tool_name", "args": {"key": "value"}}
+</tool_call>
+
+Wait for the tool result before continuing. Tool results appear as:
+<tool_result>
+{result}
+</tool_result>
+
+Guidelines:
+- Read files before editing to understand context
+- Use grep/glob to explore the codebase before making changes
+- Keep changes minimal and focused
+- Explain your reasoning to the user
+"#;
+
+fn build_system_prompt(workspace: Option<&str>) -> String {
+    let mut prompt = SYSTEM_PROMPT_BASE.to_string();
+    if let Some(ws) = workspace {
+        prompt.push_str(&format!("\n\nYou are working in the project at: {ws}"));
+        prompt.push_str(TOOL_PROMPT_SECTION);
+    }
+    prompt
+}
+
+fn build_prompt(
+    model: &LlamaModel,
+    messages: &[(String, String)],
+    workspace: Option<&str>,
+) -> String {
+    if let Ok(prompt) = build_prompt_native(model, messages, workspace) {
         return prompt;
     }
     log::warn!("Native chat template failed, falling back to ChatML");
-    build_prompt_chatml(messages)
+    build_prompt_chatml(messages, workspace)
 }
 
 fn build_prompt_native(
     model: &LlamaModel,
     messages: &[(String, String)],
+    workspace: Option<&str>,
 ) -> Result<String, String> {
+    let system = build_system_prompt(workspace);
     let mut chat: Vec<LlamaChatMessage> = Vec::with_capacity(messages.len() + 1);
 
     chat.push(
-        LlamaChatMessage::new("system".into(), SYSTEM_PROMPT.into())
+        LlamaChatMessage::new("system".into(), system)
             .map_err(|e| e.to_string())?,
     );
 
     for (role, content) in messages {
+        let r = if role == "tool" { "user" } else { role };
         chat.push(
-            LlamaChatMessage::new(role.clone(), content.clone())
+            LlamaChatMessage::new(r.to_string(), content.clone())
                 .map_err(|e| e.to_string())?,
         );
     }
@@ -375,11 +523,13 @@ fn build_prompt_native(
     Ok(prompt)
 }
 
-fn build_prompt_chatml(messages: &[(String, String)]) -> String {
-    let mut prompt = format!("<|im_start|>system\n{SYSTEM_PROMPT}<|im_end|>\n");
+fn build_prompt_chatml(messages: &[(String, String)], workspace: Option<&str>) -> String {
+    let system = build_system_prompt(workspace);
+    let mut prompt = format!("<|im_start|>system\n{system}<|im_end|>\n");
     for (role, content) in messages {
+        let r = if role == "tool" { "user" } else { role.as_str() };
         prompt.push_str("<|im_start|>");
-        prompt.push_str(role);
+        prompt.push_str(r);
         prompt.push('\n');
         prompt.push_str(content);
         prompt.push_str("<|im_end|>\n");
@@ -400,8 +550,9 @@ fn run_inference(
     cancel: &AtomicBool,
     chat_id: &str,
     app_handle: &tauri::AppHandle,
+    workspace: Option<&str>,
 ) -> Result<String, String> {
-    let prompt = build_prompt(model, messages);
+    let prompt = build_prompt(model, messages, workspace);
 
     let tokens = model
         .str_to_token(&prompt, AddBos::Always)

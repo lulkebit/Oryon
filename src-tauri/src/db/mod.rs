@@ -124,6 +124,29 @@ impl Database {
         })
     }
 
+    pub fn get_workspace(&self, id: &str) -> Result<Option<Workspace>, DbError> {
+        let mut stmt = self.conn.prepare(
+            "SELECT id, name, path, created_at, updated_at, last_opened, sort_order
+             FROM workspaces WHERE id = ?1",
+        )?;
+        let mut rows = stmt.query_map([id], |row| {
+            Ok(Workspace {
+                id: row.get(0)?,
+                name: row.get(1)?,
+                path: row.get(2)?,
+                created_at: row.get(3)?,
+                updated_at: row.get(4)?,
+                last_opened: row.get(5)?,
+                sort_order: row.get(6)?,
+            })
+        })?;
+        match rows.next() {
+            Some(Ok(w)) => Ok(Some(w)),
+            Some(Err(e)) => Err(e.into()),
+            None => Ok(None),
+        }
+    }
+
     pub fn rename_workspace(&self, id: &str, name: &str) -> Result<(), DbError> {
         let now = chrono::Utc::now().to_rfc3339();
         self.conn.execute(
@@ -158,6 +181,28 @@ impl Database {
             })
         })?;
         rows.collect::<Result<Vec<_>, _>>().map_err(Into::into)
+    }
+
+    pub fn get_chat(&self, id: &str) -> Result<Option<Chat>, DbError> {
+        let mut stmt = self.conn.prepare(
+            "SELECT id, workspace_id, title, created_at, updated_at, is_archived
+             FROM chats WHERE id = ?1",
+        )?;
+        let mut rows = stmt.query_map([id], |row| {
+            Ok(Chat {
+                id: row.get(0)?,
+                workspace_id: row.get(1)?,
+                title: row.get(2)?,
+                created_at: row.get(3)?,
+                updated_at: row.get(4)?,
+                is_archived: row.get::<_, i32>(5)? != 0,
+            })
+        })?;
+        match rows.next() {
+            Some(Ok(c)) => Ok(Some(c)),
+            Some(Err(e)) => Err(e.into()),
+            None => Ok(None),
+        }
     }
 
     pub fn create_chat(&self, workspace_id: &str, title: &str) -> Result<Chat, DbError> {

@@ -2595,6 +2595,7 @@ dependencies = [
  "chrono",
  "encoding_rs",
  "futures-util",
+ "glob",
  "llama-cpp-4",
  "log",
  "reqwest",

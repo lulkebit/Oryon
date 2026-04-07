@@ -21,6 +21,32 @@ function stripControlTokens(s: string): string {
 let _listenersActive = false
 let _unlisten: (() => void) | null = null
 
+export interface ToolCallEvent {
+  chatId: string
+  round: number
+  tool: { name: string; args: Record<string, unknown> }
+}
+
+export interface ToolResultEvent {
+  chatId: string
+  round: number
+  result: {
+    toolName: string
+    success: boolean
+    output: string
+    durationMs: number
+  }
+}
+
+export interface ActiveToolCall {
+  round: number
+  toolName: string
+  args: Record<string, unknown>
+  status: 'running' | 'completed' | 'error'
+  output?: string
+  durationMs?: number
+}
+
 interface ChatState {
   messages: Message[]
   currentChatId: string | null
@@ -28,6 +54,7 @@ interface ChatState {
   isStreaming: boolean
   streamingContent: string
   loading: boolean
+  activeToolCalls: ActiveToolCall[]
 
   setCurrentChat: (chatId: string | null) => void
   loadMessages: (chatId: string) => Promise<void>
@@ -35,6 +62,8 @@ interface ChatState {
   appendToken: (chatId: string, token: string) => void
   finalizeStream: (chatId: string, content: string) => Promise<void>
   handleStreamError: (chatId: string, error: string) => void
+  handleToolCall: (event: ToolCallEvent) => void
+  handleToolResult: (event: ToolResultEvent) => void
   clearMessages: () => void
   setupListeners: () => Promise<void>
   teardownListeners: () => void
@@ -47,6 +76,7 @@ export const useChatStore = create<ChatState>((set, get) => ({
   isStreaming: false,
   streamingContent: '',
   loading: false,
+  activeToolCalls: [],
 
   setCurrentChat: (chatId) => {
     const prev = get().currentChatId
@@ -157,15 +187,52 @@ export const useChatStore = create<ChatState>((set, get) => ({
           messages: [...s.messages, message],
           isStreaming: false,
           streamingContent: '',
+          activeToolCalls: [],
         }))
       } else {
-        set({ isStreaming: false, streamingContent: '' })
+        set({ isStreaming: false, streamingContent: '', activeToolCalls: [] })
       }
     } catch (err) {
       console.error('Failed to save assistant message:', err)
-      set({ isStreaming: false, streamingContent: '' })
+      set({ isStreaming: false, streamingContent: '', activeToolCalls: [] })
     }
     useEngineStore.getState().setGenerating(false)
+  },
+
+  handleToolCall: (event) => {
+    const { currentChatId } = get()
+    if (event.chatId !== currentChatId) return
+
+    set((s) => ({
+      activeToolCalls: [
+        ...s.activeToolCalls,
+        {
+          round: event.round,
+          toolName: event.tool.name,
+          args: event.tool.args,
+          status: 'running',
+        },
+      ],
+      streamingContent: '',
+    }))
+  },
+
+  handleToolResult: (event) => {
+    const { currentChatId } = get()
+    if (event.chatId !== currentChatId) return
+
+    set((s) => ({
+      activeToolCalls: s.activeToolCalls.map((tc) =>
+        tc.round === event.round
+          ? {
+              ...tc,
+              status: event.result.success ? 'completed' : 'error',
+              output: event.result.output,
+              durationMs: event.result.durationMs,
+            }
+          : tc
+      ),
+    }))
   },
 
   handleStreamError: (_chatId, error) => {
@@ -174,6 +241,7 @@ export const useChatStore = create<ChatState>((set, get) => ({
       isStreaming: false,
       streamingContent: '',
       streamingChatId: null,
+      activeToolCalls: [],
     })
     useEngineStore.getState().setGenerating(false)
   },
@@ -220,10 +288,20 @@ export const useChatStore = create<ChatState>((set, get) => ({
       }
     )
 
+    const u4 = await listen<ToolCallEvent>('tool:call', (event) => {
+      useChatStore.getState().handleToolCall(event.payload)
+    })
+
+    const u5 = await listen<ToolResultEvent>('tool:result', (event) => {
+      useChatStore.getState().handleToolResult(event.payload)
+    })
+
     _unlisten = () => {
       u1()
       u2()
       u3()
+      u4()
+      u5()
     }
   },
 

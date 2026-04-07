@@ -2,6 +2,7 @@ mod chat;
 pub mod engine;
 pub mod hub;
 mod message;
+pub mod tools;
 mod workspace;
 
 use crate::AppState;

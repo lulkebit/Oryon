@@ -38,3 +38,5 @@ export {
   deleteModel,
 } from './hub'
 export type { HfModelResult, GgufFile, StoredModel } from './hub'
+export { executeTool, listAvailableTools } from './tools'
+export type { ToolResult, ToolInfo } from './tools'

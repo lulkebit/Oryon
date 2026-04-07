@@ -29,11 +29,19 @@ pub async fn start_inference(
 ) -> Result<(), String> {
     let db = app_state.db.lock().map_err(|e| e.to_string())?;
     let raw_messages = db.list_messages(&chat_id).map_err(|e| e.to_string())?;
+
+    let chat = db.get_chat(&chat_id).map_err(|e| e.to_string())?;
+    let workspace_path = chat.and_then(|c| {
+        db.get_workspace(&c.workspace_id)
+            .ok()
+            .flatten()
+            .map(|w| w.path)
+    });
     drop(db);
 
     let messages: Vec<(String, String)> = raw_messages
         .iter()
-        .filter(|m| m.role == "user" || m.role == "assistant")
+        .filter(|m| m.role == "user" || m.role == "assistant" || m.role == "tool")
         .map(|m| (m.role.clone(), m.content.clone()))
         .collect();
 
@@ -46,6 +54,7 @@ pub async fn start_inference(
         messages,
         SamplingParams::default(),
         app_handle,
+        workspace_path,
     )
 }
 

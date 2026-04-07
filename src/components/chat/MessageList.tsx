@@ -1,14 +1,17 @@
 import { useEffect, useRef } from 'react'
 import { Cpu } from 'iconsax-react'
 import type { Message } from '@/lib/types'
+import type { ActiveToolCall } from '@/stores/chatStore'
 import { MessageBubble } from './MessageBubble'
 import { MarkdownContent } from './MarkdownContent'
+import { ToolCallBubble } from './ToolCallBubble'
 
 interface MessageListProps {
   messages: Message[]
   loading?: boolean
   isStreaming?: boolean
   streamingContent?: string
+  activeToolCalls?: ActiveToolCall[]
 }
 
 export const MessageList = ({
@@ -16,12 +19,13 @@ export const MessageList = ({
   loading,
   isStreaming,
   streamingContent,
+  activeToolCalls = [],
 }: MessageListProps) => {
   const bottomRef = useRef<HTMLDivElement>(null)
 
   useEffect(() => {
     bottomRef.current?.scrollIntoView({ behavior: 'smooth' })
-  }, [messages.length, streamingContent])
+  }, [messages.length, streamingContent, activeToolCalls.length])
 
   if (loading) {
     return (
@@ -55,7 +59,6 @@ export const MessageList = ({
           />
         ))}
 
-        {/* Streaming response */}
         {isStreaming && (
           <div className="flex" style={{ gap: '12px', padding: '16px 0' }}>
             <div
@@ -84,6 +87,11 @@ export const MessageList = ({
                   Agent
                 </span>
               </div>
+
+              {activeToolCalls.map((tc) => (
+                <ToolCallBubble key={tc.round} toolCall={tc} />
+              ))}
+
               {streamingContent ? (
                 <div style={{ position: 'relative' }}>
                   <MarkdownContent content={streamingContent} />
@@ -98,7 +106,7 @@ export const MessageList = ({
                     }}
                   />
                 </div>
-              ) : (
+              ) : activeToolCalls.length === 0 ? (
                 <div
                   className="flex items-center"
                   style={{ gap: '4px', height: '22px' }}
@@ -130,7 +138,7 @@ export const MessageList = ({
                     }}
                   />
                 </div>
-              )}
+              ) : null}
             </div>
           </div>
         )}

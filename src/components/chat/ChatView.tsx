@@ -15,6 +15,7 @@ export const ChatView = () => {
     loading,
     isStreaming,
     streamingContent,
+    activeToolCalls,
     loadMessages,
     sendMessage,
     clearMessages,
@@ -110,6 +111,7 @@ export const ChatView = () => {
         loading={loading}
         isStreaming={isStreaming}
         streamingContent={streamingContent}
+        activeToolCalls={activeToolCalls}
       />
 
       <ChatInput
