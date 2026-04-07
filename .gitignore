@@ -4,3 +4,8 @@ target/
 *.log
 .DS_Store
 *.local
+
+# Local agent / IDE tooling
+.agents/
+.claude/
+skills-lock.json
