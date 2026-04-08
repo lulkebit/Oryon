@@ -157,23 +157,95 @@ pub async fn download_model(
         .map_err(|e| format!("Failed to rename completed download: {e}"))?;
 
     let hash_path = target_path.clone();
-    let sha256 = tokio::task::spawn_blocking(move || {
+    let cancel_for_hash = cancel.clone();
+    let app_handle_for_hash = app_handle.clone();
+    let download_id_for_hash = download_id.to_string();
+    let total_for_hash = total;
+
+    let hash_result = tokio::task::spawn_blocking(move || {
         use std::io::Read;
-        let mut f =
-            std::fs::File::open(&hash_path).map_err(|e| format!("Hash open error: {e}"))?;
+
+        let total_bytes = std::fs::metadata(&hash_path)
+            .map(|m| m.len())
+            .unwrap_or(total_for_hash);
+
+        let _ = app_handle_for_hash.emit(
+            "download:verifying",
+            serde_json::json!({
+                "downloadId": download_id_for_hash,
+                "processed": 0u64,
+                "total": total_bytes,
+            }),
+        );
+
+        let mut f = std::fs::File::open(&hash_path)
+            .map_err(|e| format!("Hash open error: {e}"))?;
         let mut hasher = Sha256::new();
-        let mut buf = [0u8; 65536];
+        let mut buf = vec![0u8; 1024 * 1024];
+        let mut processed: u64 = 0;
+        let mut last_emit = std::time::Instant::now();
+
         loop {
-            let n = f.read(&mut buf).map_err(|e| format!("Hash read error: {e}"))?;
+            if cancel_for_hash.load(Ordering::SeqCst) {
+                return Err("Download cancelled".to_string());
+            }
+            let n = f
+                .read(&mut buf)
+                .map_err(|e| format!("Hash read error: {e}"))?;
             if n == 0 {
                 break;
             }
             hasher.update(&buf[..n]);
+            processed += n as u64;
+
+            if last_emit.elapsed().as_millis() >= 200 {
+                let _ = app_handle_for_hash.emit(
+                    "download:verifying",
+                    serde_json::json!({
+                        "downloadId": download_id_for_hash,
+                        "processed": processed,
+                        "total": total_bytes,
+                    }),
+                );
+                last_emit = std::time::Instant::now();
+            }
         }
+
+        let _ = app_handle_for_hash.emit(
+            "download:verifying",
+            serde_json::json!({
+                "downloadId": download_id_for_hash,
+                "processed": total_bytes,
+                "total": total_bytes,
+            }),
+        );
+
         Ok::<String, String>(format!("{:x}", hasher.finalize()))
     })
     .await
-    .map_err(|e| format!("Hash task error: {e}"))??;
+    .map_err(|e| format!("Hash task error: {e}"))?;
+
+    let sha256 = match hash_result {
+        Ok(s) => s,
+        Err(e) if e.contains("cancelled") => {
+            let _ = std::fs::remove_file(&target_path);
+            let _ = app_handle.emit(
+                "download:cancelled",
+                serde_json::json!({ "downloadId": download_id }),
+            );
+            return Err(e);
+        }
+        Err(e) => return Err(e),
+    };
+
+    if cancel.load(Ordering::SeqCst) {
+        let _ = std::fs::remove_file(&target_path);
+        let _ = app_handle.emit(
+            "download:cancelled",
+            serde_json::json!({ "downloadId": download_id }),
+        );
+        return Err("Download cancelled".to_string());
+    }
 
     log::info!("Download complete: {filename} sha256={sha256}");
 

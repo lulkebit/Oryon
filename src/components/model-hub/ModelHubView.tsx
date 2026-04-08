@@ -301,6 +301,7 @@ function ExploreTab({
     filename: string
     progress: { downloaded: number; total: number; speedBps: number } | null
     isPaused: boolean
+    verifying: { processed: number; total: number } | null
   } | null
   onDownload: (repoId: string, filename: string) => void
   onPause: () => void
@@ -1105,14 +1106,39 @@ function DownloadBanner({
     filename: string
     progress: { downloaded: number; total: number; speedBps: number } | null
     isPaused: boolean
+    verifying: { processed: number; total: number } | null
   }
   onPause: () => void
   onResume: () => void
   onCancel: () => void
 }) {
   const p = download.progress
-  const percent =
+  const v = download.verifying
+  const isVerifying = v !== null
+
+  const downloadPercent =
     p && p.total > 0 ? Math.round((p.downloaded / p.total) * 100) : 0
+  const verifyPercent =
+    v && v.total > 0 ? Math.round((v.processed / v.total) * 100) : 0
+  const percent = isVerifying ? verifyPercent : downloadPercent
+
+  const label = isVerifying
+    ? 'Verifying'
+    : download.isPaused
+    ? 'Paused'
+    : 'Downloading'
+
+  const borderColor = isVerifying
+    ? 'var(--accent)'
+    : download.isPaused
+    ? 'var(--border-default)'
+    : 'var(--accent)'
+
+  const barColor = isVerifying
+    ? 'var(--accent)'
+    : download.isPaused
+    ? 'var(--text-muted)'
+    : 'var(--accent)'
 
   return (
     <div
@@ -1121,7 +1147,7 @@ function DownloadBanner({
         padding: '12px 16px',
         borderRadius: '12px',
         background: 'var(--bg-elevated)',
-        border: `1px solid ${download.isPaused ? 'var(--border-default)' : 'var(--accent)'}`,
+        border: `1px solid ${borderColor}`,
       }}
     >
       <div
@@ -1129,19 +1155,25 @@ function DownloadBanner({
         style={{ marginBottom: '8px' }}
       >
         <div style={{ flex: 1, minWidth: 0 }}>
-          <p
-            style={{
-              fontSize: '12px',
-              fontWeight: 600,
-              color: 'var(--text-primary)',
-              overflow: 'hidden',
-              textOverflow: 'ellipsis',
-              whiteSpace: 'nowrap',
-            }}
+          <div
+            className="flex items-center"
+            style={{ gap: '8px', minWidth: 0 }}
           >
-            {download.isPaused ? 'Paused' : 'Downloading'} {download.filename}
-          </p>
-          {p && (
+            {isVerifying && <Spinner />}
+            <p
+              style={{
+                fontSize: '12px',
+                fontWeight: 600,
+                color: 'var(--text-primary)',
+                overflow: 'hidden',
+                textOverflow: 'ellipsis',
+                whiteSpace: 'nowrap',
+              }}
+            >
+              {label} {download.filename}
+            </p>
+          </div>
+          {isVerifying ? (
             <p
               style={{
                 fontSize: '11px',
@@ -1149,56 +1181,70 @@ function DownloadBanner({
                 marginTop: '2px',
               }}
             >
-              {formatBytes(p.downloaded)} / {formatBytes(p.total)}
-              {!download.isPaused && (
-                <> · {formatSpeed(p.speedBps)} · {percent}%</>
-              )}
-              {download.isPaused && <> · {percent}%</>}
+              Checking integrity · {formatBytes(v!.processed)} /{' '}
+              {formatBytes(v!.total)} · {verifyPercent}%
             </p>
+          ) : (
+            p && (
+              <p
+                style={{
+                  fontSize: '11px',
+                  color: 'var(--text-muted)',
+                  marginTop: '2px',
+                }}
+              >
+                {formatBytes(p.downloaded)} / {formatBytes(p.total)}
+                {!download.isPaused && (
+                  <> · {formatSpeed(p.speedBps)} · {downloadPercent}%</>
+                )}
+                {download.isPaused && <> · {downloadPercent}%</>}
+              </p>
+            )
           )}
         </div>
         <div className="flex items-center" style={{ gap: '4px' }}>
-          {download.isPaused ? (
-            <button
-              onClick={onResume}
-              className="flex items-center justify-center btn-press"
-              style={{
-                width: '28px',
-                height: '28px',
-                borderRadius: '6px',
-                color: 'var(--accent)',
-              }}
-              onMouseEnter={(e) => {
-                e.currentTarget.style.background = 'var(--bg-overlay)'
-              }}
-              onMouseLeave={(e) => {
-                e.currentTarget.style.background = 'transparent'
-              }}
-              aria-label="Resume download"
-            >
-              <Play size={16} color="currentColor" variant="Bold" />
-            </button>
-          ) : (
-            <button
-              onClick={onPause}
-              className="flex items-center justify-center btn-press"
-              style={{
-                width: '28px',
-                height: '28px',
-                borderRadius: '6px',
-                color: 'var(--text-muted)',
-              }}
-              onMouseEnter={(e) => {
-                e.currentTarget.style.background = 'var(--bg-overlay)'
-              }}
-              onMouseLeave={(e) => {
-                e.currentTarget.style.background = 'transparent'
-              }}
-              aria-label="Pause download"
-            >
-              <Pause size={16} color="currentColor" variant="Bold" />
-            </button>
-          )}
+          {!isVerifying &&
+            (download.isPaused ? (
+              <button
+                onClick={onResume}
+                className="flex items-center justify-center btn-press"
+                style={{
+                  width: '28px',
+                  height: '28px',
+                  borderRadius: '6px',
+                  color: 'var(--accent)',
+                }}
+                onMouseEnter={(e) => {
+                  e.currentTarget.style.background = 'var(--bg-overlay)'
+                }}
+                onMouseLeave={(e) => {
+                  e.currentTarget.style.background = 'transparent'
+                }}
+                aria-label="Resume download"
+              >
+                <Play size={16} color="currentColor" variant="Bold" />
+              </button>
+            ) : (
+              <button
+                onClick={onPause}
+                className="flex items-center justify-center btn-press"
+                style={{
+                  width: '28px',
+                  height: '28px',
+                  borderRadius: '6px',
+                  color: 'var(--text-muted)',
+                }}
+                onMouseEnter={(e) => {
+                  e.currentTarget.style.background = 'var(--bg-overlay)'
+                }}
+                onMouseLeave={(e) => {
+                  e.currentTarget.style.background = 'transparent'
+                }}
+                aria-label="Pause download"
+              >
+                <Pause size={16} color="currentColor" variant="Bold" />
+              </button>
+            ))}
           <button
             onClick={onCancel}
             className="flex items-center justify-center btn-press"
@@ -1214,7 +1260,7 @@ function DownloadBanner({
             onMouseLeave={(e) => {
               e.currentTarget.style.background = 'transparent'
             }}
-            aria-label="Cancel download"
+            aria-label={isVerifying ? 'Cancel verification' : 'Cancel download'}
           >
             <CloseCircle size={16} color="currentColor" />
           </button>
@@ -1233,7 +1279,7 @@ function DownloadBanner({
             height: '100%',
             width: `${percent}%`,
             borderRadius: '2px',
-            background: download.isPaused ? 'var(--text-muted)' : 'var(--accent)',
+            background: barColor,
             transition: 'width 300ms var(--ease-out)',
           }}
         />

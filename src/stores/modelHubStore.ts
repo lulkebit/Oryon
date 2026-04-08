@@ -19,11 +19,17 @@ interface DownloadProgress {
   speedBps: number
 }
 
+interface VerifyProgress {
+  processed: number
+  total: number
+}
+
 interface ActiveDownload {
   repoId: string
   filename: string
   progress: DownloadProgress | null
   isPaused: boolean
+  verifying: VerifyProgress | null
 }
 
 export interface FeaturedCategory {
@@ -194,7 +200,13 @@ export const useModelHubStore = create<ModelHubState>((set, get) => ({
 
   startDownload: async (repoId, filename) => {
     set({
-      activeDownload: { repoId, filename, progress: null, isPaused: false },
+      activeDownload: {
+        repoId,
+        filename,
+        progress: null,
+        isPaused: false,
+        verifying: null,
+      },
       error: null,
     })
     await doDownload(repoId, filename, set)
@@ -208,7 +220,7 @@ export const useModelHubStore = create<ModelHubState>((set, get) => ({
     const dl = get().activeDownload
     if (!dl) return
     set({
-      activeDownload: { ...dl, isPaused: false },
+      activeDownload: { ...dl, isPaused: false, verifying: null },
       error: null,
     })
     await doDownload(dl.repoId, dl.filename, set)
@@ -259,6 +271,22 @@ export const useModelHubStore = create<ModelHubState>((set, get) => ({
     await listen<DownloadProgress>('download:progress', (event) => {
       useModelHubStore.getState().updateDownloadProgress(event.payload)
     })
+    await listen<{ processed: number; total: number }>(
+      'download:verifying',
+      (event) => {
+        const dl = useModelHubStore.getState().activeDownload
+        if (!dl) return
+        useModelHubStore.setState({
+          activeDownload: {
+            ...dl,
+            verifying: {
+              processed: event.payload.processed,
+              total: event.payload.total,
+            },
+          },
+        })
+      }
+    )
     await listen('download:completed', () => {
       useModelHubStore.getState().onDownloadComplete()
     })
