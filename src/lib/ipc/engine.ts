@@ -4,6 +4,8 @@ export interface ModelInfo {
   modelId: string
   path: string
   size: number
+  /** Max context length from GGUF metadata (tokens). */
+  contextLength: number
 }
 
 export interface EngineStatus {

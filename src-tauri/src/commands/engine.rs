@@ -87,6 +87,13 @@ pub async fn start_inference(
         .and_then(|raw| serde_json::from_str(&raw).ok())
         .unwrap_or_default();
 
+    let n_ctx_cap = db
+        .get_setting("context_window")
+        .ok()
+        .flatten()
+        .and_then(|s| s.parse::<u32>().ok())
+        .filter(|&n| n > 0);
+
     drop(db);
 
     let messages: Vec<(String, String)> = raw_messages
@@ -109,6 +116,7 @@ pub async fn start_inference(
         allowed_tools,
         shell_blocklist,
         excluded_patterns,
+        n_ctx_cap,
     )
 }
 

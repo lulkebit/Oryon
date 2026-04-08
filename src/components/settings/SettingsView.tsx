@@ -597,18 +597,21 @@ function ModelSettings() {
           displayValue={gpuLayers >= 999 ? 'All' : String(gpuLayers)}
         />
         <SettingRow
-          label="Context Window"
-          description="Maximum context length for inference"
+          label="Context window cap"
+          description="Use Model default for the full length reported in the GGUF (per loaded model). Set a lower cap to reduce RAM use."
         >
           <SelectInput
             value={String(contextWindow)}
             onChange={(v) => setContextWindow(parseInt(v, 10))}
             options={[
+              { value: '0', label: 'Model default (GGUF)' },
               { value: '2048', label: '2,048' },
               { value: '4096', label: '4,096' },
               { value: '8192', label: '8,192' },
               { value: '16384', label: '16,384' },
               { value: '32768', label: '32,768' },
+              { value: '65536', label: '65,536' },
+              { value: '131072', label: '131,072' },
             ]}
           />
         </SettingRow>

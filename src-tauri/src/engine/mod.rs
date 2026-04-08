@@ -44,6 +44,8 @@ pub struct ModelInfo {
     pub model_id: String,
     pub path: String,
     pub size: u64,
+    /// Training/context length from GGUF (`llama_n_ctx_train`).
+    pub context_length: u32,
 }
 
 #[derive(Debug, Clone, Serialize)]
@@ -77,6 +79,8 @@ enum Cmd {
         allowed_tools: Option<Vec<String>>,
         shell_blocklist: Vec<String>,
         excluded_patterns: Vec<String>,
+        /// When `Some(n)` with n > 0, caps KV context at `min(n_ctx_train, n)`.
+        n_ctx_cap: Option<u32>,
     },
     Status {
         resp: Resp<EngineStatus>,
@@ -165,6 +169,7 @@ impl Engine {
         allowed_tools: Option<Vec<String>>,
         shell_blocklist: Vec<String>,
         excluded_patterns: Vec<String>,
+        n_ctx_cap: Option<u32>,
     ) -> Result<(), String> {
         self.cancel.store(false, Ordering::SeqCst);
         self.tx
@@ -178,6 +183,7 @@ impl Engine {
                 allowed_tools,
                 shell_blocklist,
                 excluded_patterns,
+                n_ctx_cap,
             })
             .map_err(|_| "Engine thread disconnected".to_string())
     }
@@ -224,12 +230,17 @@ fn engine_loop(rx: mpsc::Receiver<Cmd>, cancel: Arc<AtomicBool>, generating: Arc
                 match LlamaModel::load_from_file(&backend, &path, &params) {
                     Ok(model) => {
                         let size = std::fs::metadata(&path).map(|m| m.len()).unwrap_or(0);
+                        let context_length = model.n_ctx_train();
                         let info = ModelInfo {
                             model_id,
                             path,
                             size,
+                            context_length,
                         };
-                        log::info!("Model loaded ({} MB)", size / 1_048_576);
+                        log::info!(
+                            "Model loaded ({} MB, n_ctx_train={context_length})",
+                            size / 1_048_576
+                        );
                         loaded = Some((model, info.clone()));
                         resp.send(Ok(info)).ok();
                     }
@@ -257,6 +268,7 @@ fn engine_loop(rx: mpsc::Receiver<Cmd>, cancel: Arc<AtomicBool>, generating: Arc
                 allowed_tools,
                 shell_blocklist,
                 excluded_patterns,
+                n_ctx_cap,
             } => {
                 generating.store(true, Ordering::SeqCst);
 
@@ -274,6 +286,7 @@ fn engine_loop(rx: mpsc::Receiver<Cmd>, cancel: Arc<AtomicBool>, generating: Arc
                         allowed_tools.as_deref(),
                         &shell_blocklist,
                         &excluded_patterns,
+                        n_ctx_cap,
                     );
                 } else {
                     let _ = app_handle.emit(
@@ -390,6 +403,7 @@ fn run_agentic_loop(
     allowed_tools: Option<&[String]>,
     shell_blocklist: &[String],
     excluded_patterns: &[String],
+    n_ctx_cap: Option<u32>,
 ) {
     let mut messages = initial_messages;
     let mut total_output = String::new();
@@ -401,7 +415,19 @@ fn run_agentic_loop(
             total_output.len()
         );
 
-        match run_inference(backend, model, &messages, params, cancel, chat_id, app_handle, workspace, custom_system_prompt, allowed_tools) {
+        match run_inference(
+            backend,
+            model,
+            &messages,
+            params,
+            cancel,
+            chat_id,
+            app_handle,
+            workspace,
+            custom_system_prompt,
+            allowed_tools,
+            n_ctx_cap,
+        ) {
             Ok(content) => {
                 log::info!(
                     "Round {round} inference result: {} chars, has_tool_call={}",
@@ -753,6 +779,15 @@ fn build_prompt_chatml(
 // ── Inference loop ───────────────────────────────────
 
 const BATCH_SIZE: usize = 512;
+const MIN_N_CTX: u32 = 512;
+
+fn resolve_context_size(model: &LlamaModel, n_ctx_cap: Option<u32>) -> u32 {
+    let trained = model.n_ctx_train().max(MIN_N_CTX);
+    match n_ctx_cap {
+        Some(cap) if cap > 0 => trained.min(cap).max(MIN_N_CTX),
+        _ => trained,
+    }
+}
 
 fn run_inference(
     backend: &LlamaBackend,
@@ -765,6 +800,7 @@ fn run_inference(
     workspace: Option<&str>,
     custom_system_prompt: Option<&str>,
     allowed_tools: Option<&[String]>,
+    n_ctx_cap: Option<u32>,
 ) -> Result<String, String> {
     let prompt = build_prompt(model, messages, workspace, custom_system_prompt, allowed_tools);
 
@@ -773,14 +809,22 @@ fn run_inference(
         .map_err(|e| format!("Tokenization failed: {e}"))?;
 
     let n_prompt = tokens.len() as i32;
-    let n_ctx = 4096u32;
+    let n_ctx = resolve_context_size(model, n_ctx_cap);
+
+    log::info!(
+        "Inference n_ctx={n_ctx} (n_ctx_train={}, cap={n_ctx_cap:?}), n_prompt_tokens={n_prompt}",
+        model.n_ctx_train()
+    );
 
     if n_prompt as u32 >= n_ctx {
-        return Err("Prompt exceeds context window".to_string());
+        return Err(format!(
+            "Prompt exceeds context window ({n_prompt} tokens >= {n_ctx} n_ctx)"
+        ));
     }
 
-    let ctx_params =
-        LlamaContextParams::default().with_n_ctx(NonZeroU32::new(n_ctx));
+    let ctx_params = LlamaContextParams::default().with_n_ctx(Some(
+        NonZeroU32::new(n_ctx).expect("n_ctx >= MIN_N_CTX"),
+    ));
 
     let mut ctx = model
         .new_context(backend, ctx_params)
@@ -819,7 +863,8 @@ fn run_inference(
     let mut output = String::new();
     let mut decoder = encoding_rs::UTF_8.new_decoder();
     let mut n_cur = tokens.len() as i32;
-    let n_max = n_prompt + params.max_tokens;
+    let n_ctx_i = n_ctx as i32;
+    let n_max = (n_prompt + params.max_tokens).min(n_ctx_i);
     let mut in_tool_call = false;
 
     while n_cur < n_max {

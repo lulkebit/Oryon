@@ -1694,7 +1694,11 @@ function UsageTab() {
                 </span>
               </div>
               <div style={{ color: 'var(--text-muted)' }}>
-                <span>Size: {formatBytes(loadedModel.size)}</span>
+                <span>
+                  Size: {formatBytes(loadedModel.size)}
+                  {' · '}
+                  Context: {loadedModel.contextLength.toLocaleString()} tok
+                </span>
               </div>
             </div>
           ) : (

@@ -91,7 +91,7 @@ export const useSettingsStore = create<SettingsState>((set, get_) => ({
   autoLoadDefaultEnabled: true,
   inferenceDefaults: DEFAULT_INFERENCE,
   gpuLayers: 999,
-  contextWindow: 4096,
+  contextWindow: 0,
   autoUnloadEnabled: false,
   autoUnloadMinutes: 30,
   modelStoragePath: '',
@@ -135,7 +135,10 @@ export const useSettingsStore = create<SettingsState>((set, get_) => ({
       autoLoadDefaultEnabled: autoLoadDefaultEnabled !== 'false',
       inferenceDefaults: jsonParse(inferenceRaw, DEFAULT_INFERENCE),
       gpuLayers: gpuLayers ? parseInt(gpuLayers, 10) : 999,
-      contextWindow: contextWindow ? parseInt(contextWindow, 10) : 4096,
+      contextWindow:
+        contextWindow !== null && contextWindow !== ''
+          ? parseInt(contextWindow, 10) || 0
+          : 0,
       autoUnloadEnabled: autoUnloadEnabled === 'true',
       autoUnloadMinutes: autoUnloadMinutes
         ? parseInt(autoUnloadMinutes, 10)
