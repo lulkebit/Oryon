@@ -20,6 +20,8 @@ interface EngineState {
   setLoadedModel: (m: ModelInfo | null) => void
 }
 
+let initPromise: Promise<void> | null = null
+
 export const useEngineStore = create<EngineState>((set, get) => ({
   loadedModel: null,
   generating: false,
@@ -27,6 +29,8 @@ export const useEngineStore = create<EngineState>((set, get) => ({
   hardware: null,
 
   init: async () => {
+    if (initPromise) return initPromise
+    initPromise = (async () => {
     try {
       const [status, hardware] = await Promise.all([
         ipc.getEngineStatus(),
@@ -74,6 +78,8 @@ export const useEngineStore = create<EngineState>((set, get) => ({
     } catch (err) {
       console.error('Failed to init engine store:', err)
     }
+    })()
+    return initPromise
   },
 
   loadModel: async () => {

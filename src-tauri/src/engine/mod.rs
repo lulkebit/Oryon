@@ -223,6 +223,14 @@ fn engine_loop(rx: mpsc::Receiver<Cmd>, cancel: Arc<AtomicBool>, generating: Arc
                 gpu_layers,
                 resp,
             } => {
+                if let Some((_, existing)) = loaded.as_ref() {
+                    if existing.model_id == model_id && existing.path == path {
+                        log::info!("Model {model_id} already loaded, skipping reload");
+                        resp.send(Ok(existing.clone())).ok();
+                        continue;
+                    }
+                }
+
                 log::info!("Loading model from {path} (gpu_layers={gpu_layers})");
                 let params = LlamaModelParams::default().with_n_gpu_layers(gpu_layers);
                 let params = std::pin::pin!(params);
