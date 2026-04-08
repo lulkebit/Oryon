@@ -489,6 +489,8 @@ function ModelSettings() {
   const {
     defaultModelId,
     setDefaultModelId,
+    autoLoadDefaultEnabled,
+    setAutoLoadDefault,
     inferenceDefaults,
     setInferenceDefaults,
     gpuLayers,
@@ -528,6 +530,15 @@ function ModelSettings() {
               })),
             ]}
             width="200px"
+          />
+        </SettingRow>
+        <SettingRow
+          label="Load on startup"
+          description="Automatically load the default model when Oryon starts"
+        >
+          <Toggle
+            checked={autoLoadDefaultEnabled}
+            onChange={setAutoLoadDefault}
           />
         </SettingRow>
       </Section>

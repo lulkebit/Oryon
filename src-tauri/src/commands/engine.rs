@@ -5,14 +5,21 @@ use tauri::State;
 
 #[tauri::command]
 pub async fn load_model(
+    app_state: State<'_, AppState>,
     engine: State<'_, Engine>,
     path: String,
     model_id: String,
     gpu_layers: Option<u32>,
 ) -> Result<ModelInfo, String> {
-    engine
-        .load_model(path, model_id, gpu_layers.unwrap_or(999))
-        .await
+    let info = engine
+        .load_model(path, model_id.clone(), gpu_layers.unwrap_or(999))
+        .await?;
+
+    if let Ok(db) = app_state.db.lock() {
+        let _ = db.touch_model_last_used(&model_id);
+    }
+
+    Ok(info)
 }
 
 #[tauri::command]

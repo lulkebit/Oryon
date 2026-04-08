@@ -1,6 +1,8 @@
 import { create } from 'zustand'
 import type { ModelInfo, HardwareInfo } from '@/lib/ipc'
 import * as ipc from '@/lib/ipc'
+import { listDownloadedModels } from '@/lib/ipc/hub'
+import { useSettingsStore } from '@/stores/settingsStore'
 
 interface EngineState {
   loadedModel: ModelInfo | null
@@ -18,21 +20,6 @@ interface EngineState {
   setLoadedModel: (m: ModelInfo | null) => void
 }
 
-const LAST_LOADED_MODEL_KEY = 'last_loaded_model'
-
-interface LastLoadedModel {
-  path: string
-  modelId: string
-}
-
-function persistLastLoadedModel(path: string, modelId: string): void {
-  ipc
-    .setSetting(LAST_LOADED_MODEL_KEY, JSON.stringify({ path, modelId }))
-    .catch((err) =>
-      console.error('Failed to persist last loaded model:', err)
-    )
-}
-
 export const useEngineStore = create<EngineState>((set, get) => ({
   loadedModel: null,
   generating: false,
@@ -41,10 +28,9 @@ export const useEngineStore = create<EngineState>((set, get) => ({
 
   init: async () => {
     try {
-      const [status, hardware, lastLoadedRaw] = await Promise.all([
+      const [status, hardware] = await Promise.all([
         ipc.getEngineStatus(),
         ipc.getHardwareInfo(),
-        ipc.getSetting(LAST_LOADED_MODEL_KEY),
       ])
       set({
         loadedModel: status.loadedModel,
@@ -52,24 +38,38 @@ export const useEngineStore = create<EngineState>((set, get) => ({
         hardware,
       })
 
-      if (status.loadedModel || !lastLoadedRaw) return
+      if (status.loadedModel) return
 
-      let last: LastLoadedModel | null = null
+      const settings = useSettingsStore.getState()
+      if (!settings.autoLoadDefaultEnabled || !settings.defaultModelId) return
+
+      let model
       try {
-        last = JSON.parse(lastLoadedRaw) as LastLoadedModel
-      } catch {
-        last = null
+        const models = await listDownloadedModels()
+        model = models.find((m) => m.id === settings.defaultModelId)
+      } catch (err) {
+        console.warn('Failed to look up default model:', err)
+        return
       }
-      if (!last?.path || !last?.modelId) return
+      if (!model) {
+        console.warn(
+          `Default model ${settings.defaultModelId} not found in downloaded models`
+        )
+        useSettingsStore.getState().setDefaultModelId(null).catch(() => {})
+        return
+      }
 
       set({ loading: true })
       try {
-        const info = await ipc.loadModel(last.path, last.modelId)
+        const info = await ipc.loadModel(
+          model.storagePath,
+          model.id,
+          settings.gpuLayers
+        )
         set({ loadedModel: info, loading: false })
       } catch (err) {
-        console.warn('Failed to auto-load last model:', err)
+        console.error('Failed to auto-load default model:', err)
         set({ loading: false })
-        ipc.setSetting(LAST_LOADED_MODEL_KEY, '').catch(() => {})
       }
     } catch (err) {
       console.error('Failed to init engine store:', err)
@@ -92,9 +92,9 @@ export const useEngineStore = create<EngineState>((set, get) => ({
   loadModelFromPath: async (path, modelId) => {
     set({ loading: true })
     try {
-      const info = await ipc.loadModel(path, modelId)
+      const gpuLayers = useSettingsStore.getState().gpuLayers
+      const info = await ipc.loadModel(path, modelId, gpuLayers)
       set({ loadedModel: info, loading: false })
-      persistLastLoadedModel(path, modelId)
     } catch (err) {
       console.error('Failed to load model:', err)
       set({ loading: false })

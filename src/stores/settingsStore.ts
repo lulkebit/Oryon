@@ -11,6 +11,7 @@ interface InferenceDefaults {
 interface SettingsState {
   reducedMotion: boolean
   defaultModelId: string | null
+  autoLoadDefaultEnabled: boolean
   inferenceDefaults: InferenceDefaults
   gpuLayers: number
   contextWindow: number
@@ -25,6 +26,7 @@ interface SettingsState {
   load: () => Promise<void>
   setReducedMotion: (v: boolean) => Promise<void>
   setDefaultModelId: (id: string | null) => Promise<void>
+  setAutoLoadDefault: (v: boolean) => Promise<void>
   setInferenceDefaults: (d: Partial<InferenceDefaults>) => Promise<void>
   setGpuLayers: (n: number) => Promise<void>
   setContextWindow: (n: number) => Promise<void>
@@ -86,6 +88,7 @@ const DEFAULT_BLOCKLIST = [
 export const useSettingsStore = create<SettingsState>((set, get_) => ({
   reducedMotion: false,
   defaultModelId: null,
+  autoLoadDefaultEnabled: true,
   inferenceDefaults: DEFAULT_INFERENCE,
   gpuLayers: 999,
   contextWindow: 4096,
@@ -101,6 +104,7 @@ export const useSettingsStore = create<SettingsState>((set, get_) => ({
     const [
       reducedMotion,
       defaultModelId,
+      autoLoadDefaultEnabled,
       inferenceRaw,
       gpuLayers,
       contextWindow,
@@ -113,6 +117,7 @@ export const useSettingsStore = create<SettingsState>((set, get_) => ({
     ] = await Promise.all([
       get('reduced_motion'),
       get('default_model_id'),
+      get('auto_load_default_enabled'),
       get('inference_defaults'),
       get('gpu_layers'),
       get('context_window'),
@@ -127,6 +132,7 @@ export const useSettingsStore = create<SettingsState>((set, get_) => ({
     set({
       reducedMotion: reducedMotion === 'true',
       defaultModelId: defaultModelId || null,
+      autoLoadDefaultEnabled: autoLoadDefaultEnabled !== 'false',
       inferenceDefaults: jsonParse(inferenceRaw, DEFAULT_INFERENCE),
       gpuLayers: gpuLayers ? parseInt(gpuLayers, 10) : 999,
       contextWindow: contextWindow ? parseInt(contextWindow, 10) : 4096,
@@ -156,6 +162,11 @@ export const useSettingsStore = create<SettingsState>((set, get_) => ({
   setDefaultModelId: async (id) => {
     set({ defaultModelId: id })
     await put('default_model_id', id ?? '')
+  },
+
+  setAutoLoadDefault: async (v) => {
+    set({ autoLoadDefaultEnabled: v })
+    await put('auto_load_default_enabled', String(v))
   },
 
   setInferenceDefaults: async (partial) => {

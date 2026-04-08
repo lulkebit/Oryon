@@ -24,10 +24,16 @@ export const App = () => {
   useEffect(() => {
     init()
     loadWorkspaces()
-    initEngine()
     useChatStore.getState().setupListeners()
     useAgentStore.getState().loadAgents()
-    useSettingsStore.getState().load()
+    // Settings must be loaded before the engine so auto-load on startup
+    // can read defaultModelId, autoLoadDefaultEnabled and gpuLayers.
+    useSettingsStore
+      .getState()
+      .load()
+      .finally(() => {
+        initEngine()
+      })
   }, [init, loadWorkspaces, initEngine])
 
   return (

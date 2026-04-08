@@ -369,6 +369,15 @@ impl Database {
         Ok(())
     }
 
+    pub fn touch_model_last_used(&self, id: &str) -> Result<(), DbError> {
+        let now = chrono::Utc::now().to_rfc3339();
+        self.conn.execute(
+            "UPDATE models SET last_used_at = ?1 WHERE id = ?2",
+            rusqlite::params![now, id],
+        )?;
+        Ok(())
+    }
+
     // ── Agents ────────────────────────────────────────────
 
     pub fn list_agents(&self) -> Result<Vec<Agent>, DbError> {

@@ -10,6 +10,7 @@ import {
   listDownloadedModels,
   deleteModel,
 } from '@/lib/ipc/hub'
+import { useSettingsStore } from '@/stores/settingsStore'
 
 interface DownloadProgress {
   downloadId: string
@@ -222,6 +223,10 @@ export const useModelHubStore = create<ModelHubState>((set, get) => ({
       await deleteModel(modelId)
       const models = get().downloadedModels.filter((m) => m.id !== modelId)
       set({ downloadedModels: models })
+      const settings = useSettingsStore.getState()
+      if (settings.defaultModelId === modelId) {
+        await settings.setDefaultModelId(null)
+      }
     } catch (e) {
       set({ error: String(e) })
     }
