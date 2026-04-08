@@ -18,7 +18,22 @@ interface EngineState {
   setLoadedModel: (m: ModelInfo | null) => void
 }
 
-export const useEngineStore = create<EngineState>((set) => ({
+const LAST_LOADED_MODEL_KEY = 'last_loaded_model'
+
+interface LastLoadedModel {
+  path: string
+  modelId: string
+}
+
+function persistLastLoadedModel(path: string, modelId: string): void {
+  ipc
+    .setSetting(LAST_LOADED_MODEL_KEY, JSON.stringify({ path, modelId }))
+    .catch((err) =>
+      console.error('Failed to persist last loaded model:', err)
+    )
+}
+
+export const useEngineStore = create<EngineState>((set, get) => ({
   loadedModel: null,
   generating: false,
   loading: false,
@@ -26,15 +41,36 @@ export const useEngineStore = create<EngineState>((set) => ({
 
   init: async () => {
     try {
-      const [status, hardware] = await Promise.all([
+      const [status, hardware, lastLoadedRaw] = await Promise.all([
         ipc.getEngineStatus(),
         ipc.getHardwareInfo(),
+        ipc.getSetting(LAST_LOADED_MODEL_KEY),
       ])
       set({
         loadedModel: status.loadedModel,
         generating: status.generating,
         hardware,
       })
+
+      if (status.loadedModel || !lastLoadedRaw) return
+
+      let last: LastLoadedModel | null = null
+      try {
+        last = JSON.parse(lastLoadedRaw) as LastLoadedModel
+      } catch {
+        last = null
+      }
+      if (!last?.path || !last?.modelId) return
+
+      set({ loading: true })
+      try {
+        const info = await ipc.loadModel(last.path, last.modelId)
+        set({ loadedModel: info, loading: false })
+      } catch (err) {
+        console.warn('Failed to auto-load last model:', err)
+        set({ loading: false })
+        ipc.setSetting(LAST_LOADED_MODEL_KEY, '').catch(() => {})
+      }
     } catch (err) {
       console.error('Failed to init engine store:', err)
     }
@@ -50,14 +86,7 @@ export const useEngineStore = create<EngineState>((set) => ({
       'model'
     const modelId = name.replace(/\.gguf$/i, '')
 
-    set({ loading: true })
-    try {
-      const info = await ipc.loadModel(path, modelId)
-      set({ loadedModel: info, loading: false })
-    } catch (err) {
-      console.error('Failed to load model:', err)
-      set({ loading: false })
-    }
+    await get().loadModelFromPath(path, modelId)
   },
 
   loadModelFromPath: async (path, modelId) => {
@@ -65,6 +94,7 @@ export const useEngineStore = create<EngineState>((set) => ({
     try {
       const info = await ipc.loadModel(path, modelId)
       set({ loadedModel: info, loading: false })
+      persistLastLoadedModel(path, modelId)
     } catch (err) {
       console.error('Failed to load model:', err)
       set({ loading: false })
