@@ -51,6 +51,7 @@ pub fn run() {
         .manage(inference_engine)
         .manage(system_monitor)
         .manage(commands::hub::DownloadState::new())
+        .manage(commands::pty::PtyState::default())
         .invoke_handler(tauri::generate_handler![
             commands::get_app_info,
             commands::get_theme,
@@ -91,6 +92,15 @@ pub fn run() {
             commands::agent::delete_agent,
             commands::agent::get_chat_agent,
             commands::agent::set_chat_agent,
+            commands::git::git_get_status,
+            commands::git::git_get_file_diff,
+            commands::fs_browse::fs_list_directory,
+            commands::fs_browse::fs_read_file,
+            commands::pty::pty_create,
+            commands::pty::pty_write,
+            commands::pty::pty_resize,
+            commands::pty::pty_kill,
+            commands::pty::pty_list,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

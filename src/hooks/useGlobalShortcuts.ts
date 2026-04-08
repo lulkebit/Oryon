@@ -98,6 +98,13 @@ export function useGlobalShortcuts() {
         useWorkspaceStore.getState().setActiveChat(null)
         return
       }
+
+      // ⌘ ⇧ B — Toggle Right Sidebar
+      if (meta && shift && key === 'b') {
+        e.preventDefault()
+        useUiStore.getState().toggleRightSidebar()
+        return
+      }
     }
 
     window.addEventListener('keydown', handler)

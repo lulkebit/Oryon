@@ -52,3 +52,17 @@ export {
   getChatAgent,
   setChatAgent,
 } from './agents'
+export { gitGetStatus, gitGetFileDiff } from './git'
+export type { GitFileStatus, GitStatusResult } from './git'
+export {
+  ptyCreate,
+  ptyWrite,
+  ptyResize,
+  ptyKill,
+  ptyList,
+  subscribePtyData,
+  subscribePtyExit,
+} from './pty'
+export type { PtySessionInfo, PtyDataEvent, PtyExitEvent } from './pty'
+export { fsListDirectory, fsReadFile } from './fs'
+export type { FsEntry, FsFileContent } from './fs'

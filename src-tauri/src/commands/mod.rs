@@ -1,8 +1,11 @@
 pub mod agent;
 mod chat;
 pub mod engine;
+pub mod fs_browse;
+pub mod git;
 pub mod hub;
 mod message;
+pub mod pty;
 pub mod tools;
 mod workspace;
 

@@ -13,6 +13,7 @@ import { useEngineStore } from '@/stores/engineStore'
 import { useChatStore } from '@/stores/chatStore'
 import { useAgentStore } from '@/stores/agentStore'
 import { useSettingsStore } from '@/stores/settingsStore'
+import { RightSidebar } from '@/components/right-sidebar'
 
 export const App = () => {
   const { activeView, init } = useUiStore()
@@ -58,6 +59,7 @@ export const App = () => {
             </div>
           </ErrorBoundary>
         </main>
+        <RightSidebar />
       </div>
     </div>
   )
