@@ -170,7 +170,6 @@ pub struct Engine {
     tx: mpsc::Sender<Cmd>,
     join_handle: std::sync::Mutex<Option<thread::JoinHandle<()>>>,
     pub cancel: Arc<AtomicBool>,
-    pub generating: Arc<AtomicBool>,
     /// Snapshot of the currently-loaded model's architectural cost.
     /// Populated by the engine thread on `Load`, cleared on `Unload`.
     /// Read by the budget-recommendation command without round-tripping
@@ -200,19 +199,17 @@ impl Engine {
             Arc::new(std::sync::Mutex::new(None));
 
         let c = cancel.clone();
-        let g = generating.clone();
         let p = profile.clone();
 
         let handle = thread::Builder::new()
             .name("inference-engine".into())
-            .spawn(move || engine_loop(rx, c, g, p))
+            .spawn(move || engine_loop(rx, c, generating, p))
             .map_err(|e| format!("Failed to start engine thread: {e}"))?;
 
         Ok(Self {
             tx,
             join_handle: std::sync::Mutex::new(Some(handle)),
             cancel,
-            generating,
             profile,
         })
     }
