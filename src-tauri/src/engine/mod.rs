@@ -146,6 +146,8 @@ enum Cmd {
         excluded_patterns: Vec<String>,
         /// When `Some(n)` with n > 0, caps KV context at `min(n_ctx_train, n)`.
         n_ctx_cap: Option<u32>,
+        /// How many tool-call rounds the agentic loop may chain per turn.
+        max_tool_rounds: usize,
     },
     Status {
         resp: Resp<EngineStatus>,
@@ -241,6 +243,7 @@ impl Engine {
         rx.await.map_err(|_| "Engine dropped response".to_string())?
     }
 
+    #[allow(clippy::too_many_arguments)]
     pub fn start_generate(
         &self,
         chat_id: String,
@@ -253,6 +256,7 @@ impl Engine {
         shell_blocklist: Vec<String>,
         excluded_patterns: Vec<String>,
         n_ctx_cap: Option<u32>,
+        max_tool_rounds: usize,
     ) -> Result<(), String> {
         self.cancel.store(false, Ordering::SeqCst);
         self.tx
@@ -267,6 +271,7 @@ impl Engine {
                 shell_blocklist,
                 excluded_patterns,
                 n_ctx_cap,
+                max_tool_rounds,
             })
             .map_err(|_| "Engine thread disconnected".to_string())
     }
@@ -398,6 +403,7 @@ fn engine_loop(
                 shell_blocklist,
                 excluded_patterns,
                 n_ctx_cap,
+                max_tool_rounds,
             } => {
                 generating.store(true, Ordering::SeqCst);
 
@@ -416,6 +422,7 @@ fn engine_loop(
                         &shell_blocklist,
                         &excluded_patterns,
                         n_ctx_cap,
+                        max_tool_rounds,
                     );
                 } else {
                     let _ = app_handle.emit(
@@ -490,7 +497,9 @@ const CONTROL_PATTERNS: &[&str] = &[
     "<|assistant|>",
 ];
 
-const MAX_TOOL_ROUNDS: usize = 10;
+/// Hard ceiling for the configurable agentic tool-call loop — guards
+/// against a runaway setting that would let an agent churn forever.
+const MAX_TOOL_ROUNDS_CEILING: usize = 100;
 const MAX_TOOL_RESULT_CHARS: usize = 3000;
 
 fn truncate_tool_output(output: &str) -> String {
@@ -547,6 +556,7 @@ fn strip_tool_call_markup(s: &str) -> String {
     result.trim().to_string()
 }
 
+#[allow(clippy::too_many_arguments)]
 fn run_agentic_loop(
     backend: &LlamaBackend,
     model: &LlamaModel,
@@ -561,11 +571,14 @@ fn run_agentic_loop(
     shell_blocklist: &[String],
     excluded_patterns: &[String],
     n_ctx_cap: Option<u32>,
+    max_tool_rounds: usize,
 ) {
     let mut messages = initial_messages;
     let mut total_output = String::new();
+    // Clamp to sane bounds so a pathological setting can't hang the engine.
+    let rounds = max_tool_rounds.clamp(1, MAX_TOOL_ROUNDS_CEILING);
 
-    for round in 0..MAX_TOOL_ROUNDS {
+    for round in 0..rounds {
         log::info!(
             "Agentic loop round {round}, messages={}, total_output={}chars",
             messages.len(),
@@ -715,7 +728,9 @@ fn run_agentic_loop(
         }
     }
 
-    total_output.push_str("\n\n[Reached maximum tool call rounds]");
+    total_output.push_str(&format!(
+        "\n\n[Reached the configured limit of {rounds} tool-call rounds]"
+    ));
     let _ = app_handle.emit(
         "chat:complete",
         serde_json::json!({

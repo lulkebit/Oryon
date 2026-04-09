@@ -953,8 +953,14 @@ const ALL_TOOLS = [
 ] as const
 
 function AgentSettings() {
-  const { defaultTools, setDefaultTools, shellBlocklist, setShellBlocklist } =
-    useSettingsStore()
+  const {
+    defaultTools,
+    setDefaultTools,
+    shellBlocklist,
+    setShellBlocklist,
+    maxToolRounds,
+    setMaxToolRounds,
+  } = useSettingsStore()
   const [newBlockItem, setNewBlockItem] = useState('')
 
   const toggleTool = (tool: string) => {
@@ -977,6 +983,21 @@ function AgentSettings() {
 
   return (
     <>
+      <Section title="Tool Execution">
+        <SettingRow
+          label="Max tool rounds per turn"
+          description="Maximum number of back-to-back tool calls an agent may make before yielding a reply. Prevents runaway loops."
+        >
+          <NumberInput
+            value={maxToolRounds}
+            onChange={(v) => setMaxToolRounds(v)}
+            min={1}
+            max={100}
+            step={1}
+          />
+        </SettingRow>
+      </Section>
+
       <Section title="Default Tool Permissions">
         <p
           style={{

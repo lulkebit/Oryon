@@ -16,6 +16,7 @@ interface SettingsState {
   gpuLayers: number
   contextWindow: number
   ramReserveMb: number
+  maxToolRounds: number
   autoUnloadEnabled: boolean
   autoUnloadMinutes: number
   modelStoragePath: string
@@ -32,6 +33,7 @@ interface SettingsState {
   setGpuLayers: (n: number) => Promise<void>
   setContextWindow: (n: number) => Promise<void>
   setRamReserveMb: (n: number) => Promise<void>
+  setMaxToolRounds: (n: number) => Promise<void>
   setAutoUnload: (enabled: boolean, minutes?: number) => Promise<void>
   setModelStoragePath: (p: string) => Promise<void>
   setDefaultTools: (tools: string[]) => Promise<void>
@@ -95,6 +97,7 @@ export const useSettingsStore = create<SettingsState>((set, get_) => ({
   gpuLayers: 999,
   contextWindow: 0,
   ramReserveMb: 4096,
+  maxToolRounds: 10,
   autoUnloadEnabled: false,
   autoUnloadMinutes: 30,
   modelStoragePath: '',
@@ -112,6 +115,7 @@ export const useSettingsStore = create<SettingsState>((set, get_) => ({
       gpuLayers,
       contextWindow,
       ramReserveMb,
+      maxToolRounds,
       autoUnloadEnabled,
       autoUnloadMinutes,
       modelStoragePath,
@@ -126,6 +130,7 @@ export const useSettingsStore = create<SettingsState>((set, get_) => ({
       get('gpu_layers'),
       get('context_window'),
       get('ram_reserve_mb'),
+      get('max_tool_rounds'),
       get('auto_unload_enabled'),
       get('auto_unload_minutes'),
       get('model_storage_path'),
@@ -145,6 +150,7 @@ export const useSettingsStore = create<SettingsState>((set, get_) => ({
           ? parseInt(contextWindow, 10) || 0
           : 0,
       ramReserveMb: ramReserveMb ? parseInt(ramReserveMb, 10) || 4096 : 4096,
+      maxToolRounds: maxToolRounds ? parseInt(maxToolRounds, 10) || 10 : 10,
       autoUnloadEnabled: autoUnloadEnabled === 'true',
       autoUnloadMinutes: autoUnloadMinutes
         ? parseInt(autoUnloadMinutes, 10)
@@ -198,6 +204,12 @@ export const useSettingsStore = create<SettingsState>((set, get_) => ({
     const clamped = Math.max(512, Math.round(n))
     set({ ramReserveMb: clamped })
     await put('ram_reserve_mb', String(clamped))
+  },
+
+  setMaxToolRounds: async (n) => {
+    const clamped = Math.max(1, Math.min(100, Math.round(n)))
+    set({ maxToolRounds: clamped })
+    await put('max_tool_rounds', String(clamped))
   },
 
   setAutoUnload: async (enabled, minutes) => {

@@ -10,6 +10,10 @@ use tauri::State;
 /// explicit `ram_reserve_mb` setting has been chosen yet.
 const DEFAULT_RAM_RESERVE_MB: u64 = 4096;
 
+/// Default ceiling for back-to-back tool calls in a single agent turn.
+/// Matches the historical hard-coded value so upgrades stay behaviour-neutral.
+const DEFAULT_MAX_TOOL_ROUNDS: usize = 10;
+
 #[tauri::command]
 pub async fn load_model(
     app_state: State<'_, AppState>,
@@ -101,6 +105,14 @@ pub async fn start_inference(
         .and_then(|s| s.parse::<u32>().ok())
         .filter(|&n| n > 0);
 
+    let max_tool_rounds = db
+        .get_setting("max_tool_rounds")
+        .ok()
+        .flatten()
+        .and_then(|s| s.parse::<usize>().ok())
+        .filter(|&n| n > 0)
+        .unwrap_or(DEFAULT_MAX_TOOL_ROUNDS);
+
     drop(db);
 
     let messages: Vec<(String, String)> = raw_messages
@@ -124,6 +136,7 @@ pub async fn start_inference(
         shell_blocklist,
         excluded_patterns,
         n_ctx_cap,
+        max_tool_rounds,
     )
 }
 
