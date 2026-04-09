@@ -55,6 +55,24 @@ pub struct EngineStatus {
     pub generating: bool,
 }
 
+/// Snapshot of how full the context window is for a given prompt.
+/// Sent both as a response to `estimate_context` and as a `chat:context`
+/// event at the start of each generation round so the UI stays in sync.
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ContextUsage {
+    /// Tokens the rendered prompt currently occupies.
+    pub prompt_tokens: u32,
+    /// Effective context window after applying any user cap.
+    pub n_ctx: u32,
+    /// Raw context length the model was trained for.
+    pub n_ctx_train: u32,
+    /// Reserved budget for the next generation (sampling.max_tokens).
+    pub max_gen_tokens: u32,
+    /// True if the prompt no longer fits and inference would fail.
+    pub overflow: bool,
+}
+
 // ── Channel command types ────────────────────────────
 
 type Resp<T> = tokio::sync::oneshot::Sender<T>;
@@ -84,6 +102,15 @@ enum Cmd {
     },
     Status {
         resp: Resp<EngineStatus>,
+    },
+    EstimateContext {
+        messages: Vec<(String, String)>,
+        workspace_path: Option<String>,
+        custom_system_prompt: Option<String>,
+        allowed_tools: Option<Vec<String>>,
+        n_ctx_cap: Option<u32>,
+        max_gen_tokens: u32,
+        resp: Resp<Result<ContextUsage, String>>,
     },
     Shutdown,
 }
@@ -198,6 +225,31 @@ impl Engine {
             .send(Cmd::Status { resp: tx })
             .map_err(|_| "Engine thread disconnected".to_string())?;
         rx.await.map_err(|_| "Engine dropped response".to_string())
+    }
+
+    #[allow(clippy::too_many_arguments)]
+    pub async fn estimate_context(
+        &self,
+        messages: Vec<(String, String)>,
+        workspace_path: Option<String>,
+        custom_system_prompt: Option<String>,
+        allowed_tools: Option<Vec<String>>,
+        n_ctx_cap: Option<u32>,
+        max_gen_tokens: u32,
+    ) -> Result<ContextUsage, String> {
+        let (tx, rx) = tokio::sync::oneshot::channel();
+        self.tx
+            .send(Cmd::EstimateContext {
+                messages,
+                workspace_path,
+                custom_system_prompt,
+                allowed_tools,
+                n_ctx_cap,
+                max_gen_tokens,
+                resp: tx,
+            })
+            .map_err(|_| "Engine thread disconnected".to_string())?;
+        rx.await.map_err(|_| "Engine dropped response".to_string())?
     }
 }
 
@@ -315,6 +367,31 @@ fn engine_loop(rx: mpsc::Receiver<Cmd>, cancel: Arc<AtomicBool>, generating: Arc
                     generating: generating.load(Ordering::SeqCst),
                 })
                 .ok();
+            }
+
+            Cmd::EstimateContext {
+                messages,
+                workspace_path,
+                custom_system_prompt,
+                allowed_tools,
+                n_ctx_cap,
+                max_gen_tokens,
+                resp,
+            } => {
+                let result = if let Some((ref model, _)) = loaded {
+                    estimate_context_usage(
+                        model,
+                        &messages,
+                        workspace_path.as_deref(),
+                        custom_system_prompt.as_deref(),
+                        allowed_tools.as_deref(),
+                        n_ctx_cap,
+                        max_gen_tokens,
+                    )
+                } else {
+                    Err("No model loaded".to_string())
+                };
+                resp.send(result).ok();
             }
 
             Cmd::Shutdown => {
@@ -797,6 +874,30 @@ fn resolve_context_size(model: &LlamaModel, n_ctx_cap: Option<u32>) -> u32 {
     }
 }
 
+fn estimate_context_usage(
+    model: &LlamaModel,
+    messages: &[(String, String)],
+    workspace: Option<&str>,
+    custom_system_prompt: Option<&str>,
+    allowed_tools: Option<&[String]>,
+    n_ctx_cap: Option<u32>,
+    max_gen_tokens: u32,
+) -> Result<ContextUsage, String> {
+    let prompt = build_prompt(model, messages, workspace, custom_system_prompt, allowed_tools);
+    let tokens = model
+        .str_to_token(&prompt, AddBos::Always)
+        .map_err(|e| format!("Tokenization failed: {e}"))?;
+    let prompt_tokens = tokens.len() as u32;
+    let n_ctx = resolve_context_size(model, n_ctx_cap);
+    Ok(ContextUsage {
+        prompt_tokens,
+        n_ctx,
+        n_ctx_train: model.n_ctx_train(),
+        max_gen_tokens,
+        overflow: prompt_tokens >= n_ctx,
+    })
+}
+
 fn run_inference(
     backend: &LlamaBackend,
     model: &LlamaModel,
@@ -822,6 +923,21 @@ fn run_inference(
     log::info!(
         "Inference n_ctx={n_ctx} (n_ctx_train={}, cap={n_ctx_cap:?}), n_prompt_tokens={n_prompt}",
         model.n_ctx_train()
+    );
+
+    let usage = ContextUsage {
+        prompt_tokens: n_prompt as u32,
+        n_ctx,
+        n_ctx_train: model.n_ctx_train(),
+        max_gen_tokens: params.max_tokens.max(0) as u32,
+        overflow: n_prompt as u32 >= n_ctx,
+    };
+    let _ = app_handle.emit(
+        "chat:context",
+        serde_json::json!({
+            "chatId": chat_id,
+            "usage": usage,
+        }),
     );
 
     if n_prompt as u32 >= n_ctx {

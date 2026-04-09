@@ -1,5 +1,5 @@
 use crate::engine::hardware;
-use crate::engine::{Engine, EngineStatus, ModelInfo, SamplingParams};
+use crate::engine::{ContextUsage, Engine, EngineStatus, ModelInfo, SamplingParams};
 use crate::AppState;
 use tauri::State;
 
@@ -140,4 +140,86 @@ pub fn get_process_stats(
     monitor: State<'_, hardware::SystemMonitor>,
 ) -> hardware::ProcessStats {
     monitor.get_stats()
+}
+
+/// Estimate how many tokens the next prompt for `chat_id` would consume.
+/// Mirrors the message/agent/setting loading from `start_inference` but
+/// stops at tokenization instead of running generation.
+#[tauri::command]
+pub async fn estimate_context(
+    app_state: State<'_, AppState>,
+    engine: State<'_, Engine>,
+    chat_id: String,
+) -> Result<ContextUsage, String> {
+    // Scope the MutexGuard so it is dropped before the await below —
+    // a `MutexGuard` is `!Send` and would otherwise poison the future.
+    let (messages, workspace_path, custom_system_prompt, allowed_tools, n_ctx_cap, max_gen_tokens) = {
+        let db = app_state.db.lock().map_err(|e| e.to_string())?;
+        let raw_messages = db.list_messages(&chat_id).map_err(|e| e.to_string())?;
+
+        let chat = db.get_chat(&chat_id).map_err(|e| e.to_string())?;
+        let workspace_path = chat.as_ref().and_then(|c| {
+            db.get_workspace(&c.workspace_id)
+                .ok()
+                .flatten()
+                .map(|w| w.path)
+        });
+
+        let agent = db
+            .get_chat_agent(&chat_id)
+            .ok()
+            .flatten()
+            .or_else(|| db.ensure_default_agent().ok());
+
+        let (custom_system_prompt, allowed_tools, max_gen_tokens) = match &agent {
+            Some(a) => {
+                let tools: Vec<String> =
+                    serde_json::from_str(&a.tools).unwrap_or_default();
+                let sp = if a.system_prompt.is_empty() {
+                    None
+                } else {
+                    Some(a.system_prompt.clone())
+                };
+                (sp, Some(tools), a.max_tokens.max(0) as u32)
+            }
+            None => (
+                None,
+                None,
+                SamplingParams::default().max_tokens.max(0) as u32,
+            ),
+        };
+
+        let n_ctx_cap = db
+            .get_setting("context_window")
+            .ok()
+            .flatten()
+            .and_then(|s| s.parse::<u32>().ok())
+            .filter(|&n| n > 0);
+
+        let messages: Vec<(String, String)> = raw_messages
+            .iter()
+            .filter(|m| m.role == "user" || m.role == "assistant" || m.role == "tool")
+            .map(|m| (m.role.clone(), m.content.clone()))
+            .collect();
+
+        (
+            messages,
+            workspace_path,
+            custom_system_prompt,
+            allowed_tools,
+            n_ctx_cap,
+            max_gen_tokens,
+        )
+    };
+
+    engine
+        .estimate_context(
+            messages,
+            workspace_path,
+            custom_system_prompt,
+            allowed_tools,
+            n_ctx_cap,
+            max_gen_tokens,
+        )
+        .await
 }

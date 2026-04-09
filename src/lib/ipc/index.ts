@@ -29,8 +29,15 @@ export {
   getProcessStats,
   readFileText,
   pickModelFile,
+  estimateContext,
 } from './engine'
-export type { ModelInfo, EngineStatus, HardwareInfo, ProcessStats } from './engine'
+export type {
+  ModelInfo,
+  EngineStatus,
+  HardwareInfo,
+  ProcessStats,
+  ContextUsage,
+} from './engine'
 export {
   searchModels,
   searchModelsFeatured,

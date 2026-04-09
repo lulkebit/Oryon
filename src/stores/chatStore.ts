@@ -1,5 +1,6 @@
 import { create } from 'zustand'
 import type { Message } from '@/lib/types'
+import type { ContextUsage } from '@/lib/ipc'
 import { isTauri } from '@/lib/tauri'
 import * as ipc from '@/lib/ipc'
 import { useWorkspaceStore } from './workspaceStore'
@@ -60,6 +61,8 @@ interface ChatState {
   streamingContent: string
   loading: boolean
   activeToolCalls: ActiveToolCall[]
+  contextChatId: string | null
+  contextUsage: ContextUsage | null
 
   setCurrentChat: (chatId: string | null) => void
   loadMessages: (chatId: string) => Promise<void>
@@ -69,6 +72,8 @@ interface ChatState {
   handleStreamError: (chatId: string, error: string) => void
   handleToolCall: (event: ToolCallEvent) => void
   handleToolResult: (event: ToolResultEvent) => void
+  refreshContextUsage: (chatId: string) => Promise<void>
+  applyContextEvent: (chatId: string, usage: ContextUsage) => void
   clearMessages: () => void
   setupListeners: () => Promise<void>
   teardownListeners: () => void
@@ -83,6 +88,8 @@ export const useChatStore = create<ChatState>((set, get) => ({
   streamingContent: '',
   loading: false,
   activeToolCalls: [],
+  contextChatId: null,
+  contextUsage: null,
 
   setCurrentChat: (chatId) => {
     const prev = get().currentChatId
@@ -93,7 +100,12 @@ export const useChatStore = create<ChatState>((set, get) => ({
       set({ isStreaming: false, streamingContent: '' })
     }
 
-    set({ currentChatId: chatId })
+    set({
+      currentChatId: chatId,
+      // Drop stale usage; the next refresh will repopulate.
+      contextChatId: null,
+      contextUsage: null,
+    })
   },
 
   loadMessages: async (chatId) => {
@@ -107,6 +119,7 @@ export const useChatStore = create<ChatState>((set, get) => ({
       const messages = await ipc.listMessages(chatId)
       if (get().currentChatId !== chatId) return
       set({ messages, loading: false })
+      void get().refreshContextUsage(chatId)
     } catch (err) {
       console.error('Failed to load messages:', err)
       if (get().currentChatId === chatId) {
@@ -211,6 +224,7 @@ export const useChatStore = create<ChatState>((set, get) => ({
       set({ isStreaming: false, streamingContent: '', activeToolCalls: [] })
     }
     useEngineStore.getState().setGenerating(false)
+    void get().refreshContextUsage(chatId)
   },
 
   handleToolCall: (event) => {
@@ -286,11 +300,39 @@ export const useChatStore = create<ChatState>((set, get) => ({
     useEngineStore.getState().setGenerating(false)
   },
 
+  refreshContextUsage: async (chatId) => {
+    if (!isTauri) return
+    const engine = useEngineStore.getState()
+    if (!engine.loadedModel) {
+      // Without a loaded model the indicator has nothing to show.
+      if (get().contextChatId !== null || get().contextUsage !== null) {
+        set({ contextChatId: null, contextUsage: null })
+      }
+      return
+    }
+    try {
+      const usage = await ipc.estimateContext(chatId)
+      // Drop the result if the user has navigated elsewhere in the meantime.
+      if (get().currentChatId !== chatId) return
+      set({ contextChatId: chatId, contextUsage: usage })
+    } catch (err) {
+      // Estimation failures are non-fatal — leave whatever we already had.
+      console.warn('Failed to estimate context usage:', err)
+    }
+  },
+
+  applyContextEvent: (chatId, usage) => {
+    if (get().currentChatId !== chatId) return
+    set({ contextChatId: chatId, contextUsage: usage })
+  },
+
   clearMessages: () =>
     set({
       messages: [],
       loading: false,
       currentChatId: null,
+      contextChatId: null,
+      contextUsage: null,
     }),
 
   setupListeners: async () => {
@@ -336,12 +378,22 @@ export const useChatStore = create<ChatState>((set, get) => ({
       useChatStore.getState().handleToolResult(event.payload)
     })
 
+    const u6 = await listen<{ chatId: string; usage: ContextUsage }>(
+      'chat:context',
+      (event) => {
+        useChatStore
+          .getState()
+          .applyContextEvent(event.payload.chatId, event.payload.usage)
+      }
+    )
+
     _unlisten = () => {
       u1()
       u2()
       u3()
       u4()
       u5()
+      u6()
     }
   },
 

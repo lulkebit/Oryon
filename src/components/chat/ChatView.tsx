@@ -8,6 +8,7 @@ import { useUiStore } from '@/stores/uiStore'
 import { MessageList } from './MessageList'
 import { ChatInput } from './ChatInput'
 import { AgentSelector } from './AgentSelector'
+import { ContextIndicator } from './ContextIndicator'
 
 export const ChatView = () => {
   const { activeChatId, chats } = useWorkspaceStore()
@@ -17,9 +18,12 @@ export const ChatView = () => {
     isStreaming,
     streamingContent,
     activeToolCalls,
+    contextChatId,
+    contextUsage,
     loadMessages,
     sendMessage,
     clearMessages,
+    refreshContextUsage,
   } = useChatStore()
   const {
     loadedModel,
@@ -45,6 +49,18 @@ export const ChatView = () => {
     }
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [activeChatId])
+
+  // When a model is loaded/swapped after the chat is already open, the
+  // existing usage estimate is stale (different tokenizer / context size).
+  // Re-estimate on model id changes.
+  useEffect(() => {
+    if (activeChatId && loadedModel) {
+      refreshContextUsage(activeChatId)
+    }
+  }, [activeChatId, loadedModel?.modelId, refreshContextUsage])
+
+  const visibleUsage =
+    contextUsage && contextChatId === activeChatId ? contextUsage : null
 
   if (!activeChatId || !activeChat) {
     return <EmptyState />
@@ -78,6 +94,7 @@ export const ChatView = () => {
             chatId={activeChatId}
             onOpenConfig={() => setActiveView('agents')}
           />
+          <ContextIndicator usage={visibleUsage} />
           <ModelSelector
             downloadedModels={downloadedModels}
             loadedModel={loadedModel}
