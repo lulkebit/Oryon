@@ -1,9 +1,10 @@
 [package]
 name = "oryon"
 version = "0.1.0"
-description = "Local-first AI coding assistant"
-authors = ["Luke"]
+description = "Local-first desktop app for open-source AI models"
+authors = ["Luke Schroeter"]
 license = "MIT"
+homepage = "https://github.com/lulkebit/Oryon"
 repository = "https://github.com/lulkebit/Oryon"
 edition = "2021"
 rust-version = "1.77.2"

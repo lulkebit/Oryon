@@ -1,7 +1,16 @@
-# Oryon
-
-**Local-first desktop app for working with open-source AI models** — chat, tools,
-and on-device inference without a cloud API.
+<div align="center">
+  <img src="app-icon.svg" width="132" height="132" alt="Oryon logo" />
+  <h1>Oryon</h1>
+  <p><strong>Local-first desktop app for working with open-source AI models</strong></p>
+  <p>Chat, tools, and on-device inference without relying on a cloud API.</p>
+  <p>
+    <a href="#overview">Overview</a> ·
+    <a href="#development">Development</a> ·
+    <a href="docs/ARCHITECTURE.md">Architecture</a> ·
+    <a href="CONTRIBUTING.md">Contributing</a> ·
+    <a href="SECURITY.md">Security</a>
+  </p>
+</div>
 
 > **Alpha software.** Oryon is under active development. Expect rough edges,
 > breaking changes, and incomplete workflows. Do not rely on it for production
@@ -27,22 +36,16 @@ API to use the core product.
 - **On-device inference** via llama.cpp bindings (GGUF models)
 - **In-app Model Hub** to browse and download compatible models
 - **Workspace-based chat** with persistence (SQLite + filesystem)
-- **Tool-using agents** (files, shell, git, search, web — as implemented in the
-current build)
+- **Tool-using agents** (files, shell, git, search, web — as implemented in the current build)
 - **Dark and light** UI (Tailwind CSS 4)
 
 ## Requirements
-
-Roughly what the codebase expects today (see `src-tauri/Cargo.toml` and
-`package.json` if you need exact versions):
-
 
 | Tool        | Notes                                                |
 | ----------- | ---------------------------------------------------- |
 | **Rust**    | **1.77.2** or newer (`rust-version` in `Cargo.toml`) |
 | **Node.js** | **20.x or newer** (current LTS recommended)          |
 | **OS**      | **macOS**, **Windows**, or **Linux** (desktop)       |
-
 
 Install [Tauri prerequisites](https://v2.tauri.app/start/prerequisites/) for
 your platform (WebView, C toolchain on Windows, etc.) before the first build.
@@ -67,17 +70,17 @@ source is the supported path for now.
 
 ## Documentation
 
-Specifications and design notes live under `[docs/](docs/)`, including
+Specifications and design notes live under [`docs/`](docs/), including
 architecture, UI, data model, tools, and the model engine.
 
-## Contributing
+## Community
 
-Contributions are welcome. This repository will gain **contributing guidelines**,
-a **code of conduct**, and a **security policy** as they are finalized; until
-then, open issues and pull requests on GitHub for bugs and small improvements,
-and keep changes focused and easy to review.
+- Contributions are welcome. Please read [CONTRIBUTING.md](CONTRIBUTING.md)
+  before opening issues or pull requests.
+- Community participation is covered by
+  [CODE_OF_CONDUCT.md](CODE_OF_CONDUCT.md).
+- To report a vulnerability, follow [SECURITY.md](SECURITY.md).
 
 ## License
 
-**To be announced.** A `LICENSE` file and SPDX identifier will be added to the
-repository. Do not assume redistribution terms until that file is published.
+[MIT](LICENSE) © Luke Schröter

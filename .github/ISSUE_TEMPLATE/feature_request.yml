@@ -1,0 +1,40 @@
+name: Feature request
+description: Suggest an improvement or new capability for Oryon
+title: "[Feature]: "
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for sharing an idea.
+
+        Please describe the problem you want to solve first. That helps us
+        discuss trade-offs before implementation details.
+  - type: textarea
+    id: problem
+    attributes:
+      label: Problem statement
+      description: What is missing or frustrating today?
+      placeholder: I want to ...
+    validations:
+      required: true
+  - type: textarea
+    id: proposal
+    attributes:
+      label: Proposed solution
+      description: How would you like Oryon to behave?
+    validations:
+      required: true
+  - type: textarea
+    id: alternatives
+    attributes:
+      label: Alternatives considered
+      description: Optional. What workarounds or alternative approaches have you tried?
+    validations:
+      required: false
+  - type: textarea
+    id: context
+    attributes:
+      label: Additional context
+      description: Mockups, screenshots, related issues, or examples.
+    validations:
+      required: false

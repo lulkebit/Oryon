@@ -1,0 +1,63 @@
+name: Bug report
+description: Report a reproducible bug or regression in Oryon
+title: "[Bug]: "
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for taking the time to report a bug.
+
+        Please make sure the issue still reproduces on the latest `main` branch
+        when possible, and do not use this form for security vulnerabilities.
+        Security reports should follow
+        https://github.com/lulkebit/Oryon/blob/main/SECURITY.md
+  - type: input
+    id: version
+    attributes:
+      label: Version or commit
+      description: What build, tag, or commit are you running?
+      placeholder: main @ abc1234
+    validations:
+      required: true
+  - type: dropdown
+    id: platform
+    attributes:
+      label: Platform
+      options:
+        - macOS
+        - Windows
+        - Linux
+        - Other
+    validations:
+      required: true
+  - type: textarea
+    id: steps
+    attributes:
+      label: Steps to reproduce
+      description: Please list the smallest set of steps that reproduces the issue.
+      placeholder: |
+        1. Open ...
+        2. Click ...
+        3. Observe ...
+    validations:
+      required: true
+  - type: textarea
+    id: expected
+    attributes:
+      label: Expected behavior
+    validations:
+      required: true
+  - type: textarea
+    id: actual
+    attributes:
+      label: Actual behavior
+    validations:
+      required: true
+  - type: textarea
+    id: logs
+    attributes:
+      label: Logs, screenshots, or extra context
+      description: Paste any relevant output, stack traces, or screenshots here.
+      render: shell
+    validations:
+      required: false

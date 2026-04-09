@@ -2,6 +2,20 @@
   "name": "oryon",
   "private": true,
   "version": "0.1.0",
+  "description": "Local-first desktop app for working with open-source AI models",
+  "author": "Luke Schroeter",
+  "license": "MIT",
+  "homepage": "https://github.com/lulkebit/Oryon",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/lulkebit/Oryon.git"
+  },
+  "bugs": {
+    "url": "https://github.com/lulkebit/Oryon/issues"
+  },
+  "engines": {
+    "node": ">=20.0.0"
+  },
   "type": "module",
   "scripts": {
     "dev": "vite",
