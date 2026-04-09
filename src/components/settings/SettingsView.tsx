@@ -1,9 +1,10 @@
-import { useEffect, useState } from 'react'
-import { ArrowLeft2, Sun1, Moon, Monitor } from 'iconsax-react'
+import { useCallback, useEffect, useState } from 'react'
+import { ArrowLeft2, Sun1, Moon, Monitor, InfoCircle } from 'iconsax-react'
 import { useUiStore } from '@/stores/uiStore'
 import { useSettingsStore } from '@/stores/settingsStore'
 import { useModelHubStore } from '@/stores/modelHubStore'
 import { useWorkspaceStore } from '@/stores/workspaceStore'
+import { getContextBudget, type ContextBudget } from '@/lib/ipc'
 import type { Theme } from '@/lib/types'
 
 const CATEGORIES = [
@@ -484,6 +485,17 @@ function InfoRow({ label, value }: { label: string; value: string }) {
 
 // ── Models ───────────────────────────────────────────
 
+const CONTEXT_OPTIONS = [
+  { value: 0, label: 'Model default (GGUF)' },
+  { value: 2048, label: '2,048' },
+  { value: 4096, label: '4,096' },
+  { value: 8192, label: '8,192' },
+  { value: 16384, label: '16,384' },
+  { value: 32768, label: '32,768' },
+  { value: 65536, label: '65,536' },
+  { value: 131072, label: '131,072' },
+] as const
+
 function ModelSettings() {
   const { downloadedModels, loadDownloaded } = useModelHubStore()
   const {
@@ -497,15 +509,42 @@ function ModelSettings() {
     setGpuLayers,
     contextWindow,
     setContextWindow,
+    ramReserveMb,
+    setRamReserveMb,
     autoUnloadEnabled,
     autoUnloadMinutes,
     setAutoUnload,
     modelStoragePath,
   } = useSettingsStore()
 
+  const [budget, setBudget] = useState<ContextBudget | null>(null)
+  const [budgetLoading, setBudgetLoading] = useState(false)
+
+  const refreshBudget = useCallback(async () => {
+    setBudgetLoading(true)
+    try {
+      const next = await getContextBudget()
+      setBudget(next)
+    } catch (e) {
+      console.error('Failed to fetch context budget', e)
+      setBudget(null)
+    } finally {
+      setBudgetLoading(false)
+    }
+  }, [])
+
   useEffect(() => {
     loadDownloaded()
-  }, [loadDownloaded])
+    refreshBudget()
+    const id = window.setInterval(refreshBudget, 5000)
+    return () => window.clearInterval(id)
+  }, [loadDownloaded, refreshBudget])
+
+  // Refresh whenever the user nudges the reserve so the recommendation
+  // reacts immediately instead of waiting for the next interval tick.
+  useEffect(() => {
+    refreshBudget()
+  }, [ramReserveMb, refreshBudget])
 
   const diskUsage = downloadedModels.reduce(
     (acc, m) => acc + (m.fileSize ?? 0),
@@ -596,25 +635,45 @@ function ModelSettings() {
           step={1}
           displayValue={gpuLayers >= 999 ? 'All' : String(gpuLayers)}
         />
+      </Section>
+
+      <Section title="Memory Budget">
+        <SliderRow
+          label="System RAM reserve"
+          description="Memory always kept free for the OS and other apps"
+          value={ramReserveMb}
+          onChange={setRamReserveMb}
+          min={1024}
+          max={Math.max(
+            16384,
+            budget ? Math.floor(budget.totalRamBytes / 1024 / 1024 / 2) : 16384
+          )}
+          step={256}
+          displayValue={`${(ramReserveMb / 1024).toFixed(1)} GB`}
+        />
         <SettingRow
           label="Context window cap"
-          description="Use Model default for the full length reported in the GGUF (per loaded model). Set a lower cap to reduce RAM use."
+          description="Maximum tokens any chat may grow to. Lower values reduce peak RAM. With lazy allocation, smaller chats only use what they actually need."
         >
           <SelectInput
             value={String(contextWindow)}
             onChange={(v) => setContextWindow(parseInt(v, 10))}
-            options={[
-              { value: '0', label: 'Model default (GGUF)' },
-              { value: '2048', label: '2,048' },
-              { value: '4096', label: '4,096' },
-              { value: '8192', label: '8,192' },
-              { value: '16384', label: '16,384' },
-              { value: '32768', label: '32,768' },
-              { value: '65536', label: '65,536' },
-              { value: '131072', label: '131,072' },
-            ]}
+            options={CONTEXT_OPTIONS.map((o) => ({
+              value: String(o.value),
+              label: o.label,
+            }))}
           />
         </SettingRow>
+
+        <ContextRecommendationPanel
+          budget={budget}
+          loading={budgetLoading}
+          contextWindow={contextWindow}
+          onApplyRecommendation={(n) => {
+            const snapped = pickClosestContextOption(n)
+            setContextWindow(snapped)
+          }}
+        />
       </Section>
 
       <Section title="Memory Management">
@@ -661,6 +720,211 @@ function ModelSettings() {
         </div>
       </Section>
     </>
+  )
+}
+
+function pickClosestContextOption(target: number): number {
+  // Snap to a value our select offers, picking the largest option that
+  // still fits inside the recommended budget.
+  const concrete = CONTEXT_OPTIONS.filter((o) => o.value > 0)
+  let best = concrete[0].value
+  for (const o of concrete) {
+    if (o.value <= target) best = o.value
+  }
+  return best
+}
+
+function ContextRecommendationPanel({
+  budget,
+  loading,
+  contextWindow,
+  onApplyRecommendation,
+}: {
+  budget: ContextBudget | null
+  loading: boolean
+  contextWindow: number
+  onApplyRecommendation: (n: number) => void
+}) {
+  if (!budget) {
+    return (
+      <div
+        style={{
+          marginTop: '12px',
+          padding: '12px 14px',
+          borderRadius: '8px',
+          border: '1px solid var(--border-subtle)',
+          background: 'var(--bg-elevated)',
+          fontSize: '12px',
+          color: 'var(--text-muted)',
+          lineHeight: '18px',
+        }}
+      >
+        {loading
+          ? 'Reading hardware…'
+          : 'Load a model to see a personalised context-window recommendation for your machine.'}
+      </div>
+    )
+  }
+
+  const recommended = budget.recommendedMaxCtx
+  const effectiveCap =
+    contextWindow > 0
+      ? Math.min(contextWindow, budget.nCtxTrain)
+      : budget.nCtxTrain
+  const exceedsRecommended = effectiveCap > recommended && recommended > 0
+  const tone: 'ok' | 'warn' | 'critical' =
+    recommended <= 0
+      ? 'critical'
+      : exceedsRecommended
+        ? effectiveCap > recommended * 1.5
+          ? 'critical'
+          : 'warn'
+        : 'ok'
+
+  const toneColor = {
+    ok: 'var(--accent)',
+    warn: 'var(--status-warning)',
+    critical: 'var(--status-error)',
+  }[tone]
+  const toneBg = {
+    ok: 'var(--bg-elevated)',
+    warn: 'var(--accent-muted)',
+    critical: 'var(--accent-muted)',
+  }[tone]
+
+  const totalGb = budget.totalRamBytes / 1024 ** 3
+  const reserveGb = budget.systemReserveBytes / 1024 ** 3
+  const weightsGb = budget.modelWeightsBytes / 1024 ** 3
+  const overheadGb = budget.processOverheadBytes / 1024 ** 3
+  const kvBudgetGb = Math.max(0, budget.kvBudgetBytes / 1024 ** 3)
+  const kvPerTokenKb = budget.kvBytesPerToken / 1024
+  const peakKvForCapBytes = effectiveCap * budget.kvBytesPerToken
+  const peakKvForCapGb = peakKvForCapBytes / 1024 ** 3
+
+  return (
+    <div
+      style={{
+        marginTop: '12px',
+        padding: '14px 16px',
+        borderRadius: '8px',
+        border: `1px solid ${tone === 'ok' ? 'var(--border-subtle)' : toneColor}`,
+        background: toneBg,
+        display: 'flex',
+        flexDirection: 'column',
+        gap: '12px',
+      }}
+    >
+      <div className="flex items-center" style={{ gap: '8px' }}>
+        <InfoCircle size={14} color={toneColor} variant="Bold" />
+        <div
+          style={{
+            fontSize: '12px',
+            fontWeight: 600,
+            color: 'var(--text-primary)',
+          }}
+        >
+          Recommendation for this machine
+        </div>
+      </div>
+
+      <div
+        className="flex items-baseline"
+        style={{ gap: '8px', flexWrap: 'wrap' }}
+      >
+        <span
+          style={{
+            fontSize: '20px',
+            fontWeight: 600,
+            color: toneColor,
+            fontVariantNumeric: 'tabular-nums',
+            fontFamily: 'var(--font-mono)',
+          }}
+        >
+          {recommended.toLocaleString()} tok
+        </span>
+        <span style={{ fontSize: '11px', color: 'var(--text-muted)' }}>
+          maximum context window per chat
+        </span>
+      </div>
+
+      {exceedsRecommended && (
+        <div
+          style={{
+            fontSize: '11px',
+            color: toneColor,
+            lineHeight: '16px',
+          }}
+        >
+          Your current cap ({effectiveCap.toLocaleString()} tokens) needs ~
+          {peakKvForCapGb.toFixed(1)} GB of KV cache at peak — more than the
+          {' '}
+          {kvBudgetGb.toFixed(1)} GB this machine can safely afford. Lower the
+          cap or reduce the system reserve.
+        </div>
+      )}
+
+      <div
+        style={{
+          display: 'grid',
+          gridTemplateColumns: '1fr 1fr',
+          gap: '6px 16px',
+          fontSize: '11px',
+          color: 'var(--text-muted)',
+          fontFamily: 'var(--font-mono)',
+        }}
+      >
+        <BudgetLine label="Total RAM" value={`${totalGb.toFixed(1)} GB`} />
+        <BudgetLine
+          label="OS reserve"
+          value={`${reserveGb.toFixed(1)} GB`}
+        />
+        <BudgetLine
+          label="Model weights"
+          value={`${weightsGb.toFixed(2)} GB`}
+        />
+        <BudgetLine
+          label="App overhead"
+          value={`${overheadGb.toFixed(1)} GB`}
+        />
+        <BudgetLine
+          label="KV cache budget"
+          value={`${kvBudgetGb.toFixed(1)} GB`}
+        />
+        <BudgetLine
+          label="KV / token"
+          value={`${kvPerTokenKb.toFixed(0)} KB`}
+        />
+      </div>
+
+      {recommended > 0 && (
+        <button
+          onClick={() => onApplyRecommendation(recommended)}
+          className="btn-press"
+          style={{
+            alignSelf: 'flex-start',
+            height: '28px',
+            padding: '0 12px',
+            borderRadius: '6px',
+            fontSize: '11px',
+            fontWeight: 500,
+            color: 'var(--text-primary)',
+            background: 'var(--bg-base)',
+            border: '1px solid var(--border-default)',
+          }}
+        >
+          Apply recommended cap
+        </button>
+      )}
+    </div>
+  )
+}
+
+function BudgetLine({ label, value }: { label: string; value: string }) {
+  return (
+    <div className="flex items-center justify-between">
+      <span style={{ color: 'var(--text-muted)' }}>{label}</span>
+      <span style={{ color: 'var(--text-secondary)' }}>{value}</span>
+    </div>
   )
 }
 

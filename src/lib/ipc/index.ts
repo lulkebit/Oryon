@@ -30,6 +30,7 @@ export {
   readFileText,
   pickModelFile,
   estimateContext,
+  getContextBudget,
 } from './engine'
 export type {
   ModelInfo,
@@ -37,6 +38,7 @@ export type {
   HardwareInfo,
   ProcessStats,
   ContextUsage,
+  ContextBudget,
 } from './engine'
 export {
   searchModels,

@@ -76,6 +76,7 @@ pub fn run() {
             commands::engine::get_engine_status,
             commands::engine::get_hardware_info,
             commands::engine::get_process_stats,
+            commands::engine::get_context_budget,
             commands::engine::estimate_context,
             commands::hub::search_models,
             commands::hub::search_models_featured,

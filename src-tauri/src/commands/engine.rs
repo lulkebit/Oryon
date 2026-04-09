@@ -1,7 +1,14 @@
 use crate::engine::hardware;
-use crate::engine::{ContextUsage, Engine, EngineStatus, ModelInfo, SamplingParams};
+use crate::engine::{
+    compute_context_budget, ContextBudget, ContextUsage, Engine, EngineStatus, ModelInfo,
+    SamplingParams,
+};
 use crate::AppState;
 use tauri::State;
+
+/// Default RAM (MB) we keep reserved for the OS / other apps when no
+/// explicit `ram_reserve_mb` setting has been chosen yet.
+const DEFAULT_RAM_RESERVE_MB: u64 = 4096;
 
 #[tauri::command]
 pub async fn load_model(
@@ -140,6 +147,46 @@ pub fn get_process_stats(
     monitor: State<'_, hardware::SystemMonitor>,
 ) -> hardware::ProcessStats {
     monitor.get_stats()
+}
+
+/// Returns the per-chat context-window budget for the currently-loaded
+/// model. Returns `None` when no model is loaded so the UI can hide the
+/// recommendation gracefully.
+#[tauri::command]
+pub fn get_context_budget(
+    app_state: State<'_, AppState>,
+    engine: State<'_, Engine>,
+    monitor: State<'_, hardware::SystemMonitor>,
+) -> Result<Option<ContextBudget>, String> {
+    let profile = engine
+        .profile
+        .lock()
+        .map_err(|e| e.to_string())?
+        .clone();
+    let Some(profile) = profile else {
+        return Ok(None);
+    };
+
+    let reserve_mb = {
+        let db = app_state.db.lock().map_err(|e| e.to_string())?;
+        db.get_setting("ram_reserve_mb")
+            .ok()
+            .flatten()
+            .and_then(|s| s.parse::<u64>().ok())
+            .unwrap_or(DEFAULT_RAM_RESERVE_MB)
+    };
+    let system_reserve_bytes = reserve_mb.saturating_mul(1024 * 1024);
+
+    let stats = monitor.get_stats();
+    let total_ram = stats.system_memory_total;
+    let available_ram = total_ram.saturating_sub(stats.system_memory_used);
+
+    Ok(Some(compute_context_budget(
+        &profile,
+        total_ram,
+        available_ram,
+        system_reserve_bytes,
+    )))
 }
 
 /// Estimate how many tokens the next prompt for `chat_id` would consume.

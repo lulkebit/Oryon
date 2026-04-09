@@ -15,6 +15,7 @@ interface SettingsState {
   inferenceDefaults: InferenceDefaults
   gpuLayers: number
   contextWindow: number
+  ramReserveMb: number
   autoUnloadEnabled: boolean
   autoUnloadMinutes: number
   modelStoragePath: string
@@ -30,6 +31,7 @@ interface SettingsState {
   setInferenceDefaults: (d: Partial<InferenceDefaults>) => Promise<void>
   setGpuLayers: (n: number) => Promise<void>
   setContextWindow: (n: number) => Promise<void>
+  setRamReserveMb: (n: number) => Promise<void>
   setAutoUnload: (enabled: boolean, minutes?: number) => Promise<void>
   setModelStoragePath: (p: string) => Promise<void>
   setDefaultTools: (tools: string[]) => Promise<void>
@@ -92,6 +94,7 @@ export const useSettingsStore = create<SettingsState>((set, get_) => ({
   inferenceDefaults: DEFAULT_INFERENCE,
   gpuLayers: 999,
   contextWindow: 0,
+  ramReserveMb: 4096,
   autoUnloadEnabled: false,
   autoUnloadMinutes: 30,
   modelStoragePath: '',
@@ -108,6 +111,7 @@ export const useSettingsStore = create<SettingsState>((set, get_) => ({
       inferenceRaw,
       gpuLayers,
       contextWindow,
+      ramReserveMb,
       autoUnloadEnabled,
       autoUnloadMinutes,
       modelStoragePath,
@@ -121,6 +125,7 @@ export const useSettingsStore = create<SettingsState>((set, get_) => ({
       get('inference_defaults'),
       get('gpu_layers'),
       get('context_window'),
+      get('ram_reserve_mb'),
       get('auto_unload_enabled'),
       get('auto_unload_minutes'),
       get('model_storage_path'),
@@ -139,6 +144,7 @@ export const useSettingsStore = create<SettingsState>((set, get_) => ({
         contextWindow !== null && contextWindow !== ''
           ? parseInt(contextWindow, 10) || 0
           : 0,
+      ramReserveMb: ramReserveMb ? parseInt(ramReserveMb, 10) || 4096 : 4096,
       autoUnloadEnabled: autoUnloadEnabled === 'true',
       autoUnloadMinutes: autoUnloadMinutes
         ? parseInt(autoUnloadMinutes, 10)
@@ -186,6 +192,12 @@ export const useSettingsStore = create<SettingsState>((set, get_) => ({
   setContextWindow: async (n) => {
     set({ contextWindow: n })
     await put('context_window', String(n))
+  },
+
+  setRamReserveMb: async (n) => {
+    const clamped = Math.max(512, Math.round(n))
+    set({ ramReserveMb: clamped })
+    await put('ram_reserve_mb', String(clamped))
   },
 
   setAutoUnload: async (enabled, minutes) => {

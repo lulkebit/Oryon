@@ -63,14 +63,61 @@ pub struct EngineStatus {
 pub struct ContextUsage {
     /// Tokens the rendered prompt currently occupies.
     pub prompt_tokens: u32,
-    /// Effective context window after applying any user cap.
+    /// Effective context window after applying any user cap (the upper bound).
     pub n_ctx: u32,
+    /// Tokens currently allocated for the KV cache. With lazy allocation
+    /// this grows on demand and is usually much smaller than `n_ctx`.
+    pub n_ctx_alloc: u32,
     /// Raw context length the model was trained for.
     pub n_ctx_train: u32,
     /// Reserved budget for the next generation (sampling.max_tokens).
     pub max_gen_tokens: u32,
     /// True if the prompt no longer fits and inference would fail.
     pub overflow: bool,
+}
+
+/// Architectural fingerprint of a loaded model used to estimate
+/// per-chat memory cost (KV cache) and inform safe limits.
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ModelMemoryProfile {
+    pub model_id: String,
+    /// Approximate model-weight footprint in RAM (≈ GGUF file size).
+    pub weights_bytes: u64,
+    /// Bytes the KV cache consumes per token across all layers.
+    /// Assumes default F16 K/V (2 bytes per element).
+    pub kv_bytes_per_token: u64,
+    pub n_layer: u32,
+    pub n_head: u32,
+    pub n_head_kv: u32,
+    pub n_embd: u32,
+    pub n_ctx_train: u32,
+}
+
+/// How much context the system can safely afford for the loaded model
+/// given the user's RAM-reserve preference and current memory pressure.
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ContextBudget {
+    pub model_id: String,
+    /// Bytes the user wants to keep free for the OS at all times.
+    pub system_reserve_bytes: u64,
+    /// Total physical RAM on this machine.
+    pub total_ram_bytes: u64,
+    /// Currently-available RAM (live snapshot).
+    pub available_ram_bytes: u64,
+    /// Approximate model weights footprint.
+    pub model_weights_bytes: u64,
+    /// KV cache bytes per token for the loaded model.
+    pub kv_bytes_per_token: u64,
+    /// Static overhead reserved for inference scratch + UI process.
+    pub process_overhead_bytes: u64,
+    /// Bytes still available for KV cache (after reserve / weights / overhead).
+    pub kv_budget_bytes: u64,
+    /// Suggested maximum n_ctx the user should configure.
+    pub recommended_max_ctx: u32,
+    /// Cap from the GGUF training context length.
+    pub n_ctx_train: u32,
 }
 
 // ── Channel command types ────────────────────────────
@@ -122,6 +169,11 @@ pub struct Engine {
     join_handle: std::sync::Mutex<Option<thread::JoinHandle<()>>>,
     pub cancel: Arc<AtomicBool>,
     pub generating: Arc<AtomicBool>,
+    /// Snapshot of the currently-loaded model's architectural cost.
+    /// Populated by the engine thread on `Load`, cleared on `Unload`.
+    /// Read by the budget-recommendation command without round-tripping
+    /// through the inference channel.
+    pub profile: Arc<std::sync::Mutex<Option<ModelMemoryProfile>>>,
 }
 
 impl Drop for Engine {
@@ -142,13 +194,16 @@ impl Engine {
         let (tx, rx) = mpsc::channel();
         let cancel = Arc::new(AtomicBool::new(false));
         let generating = Arc::new(AtomicBool::new(false));
+        let profile: Arc<std::sync::Mutex<Option<ModelMemoryProfile>>> =
+            Arc::new(std::sync::Mutex::new(None));
 
         let c = cancel.clone();
         let g = generating.clone();
+        let p = profile.clone();
 
         let handle = thread::Builder::new()
             .name("inference-engine".into())
-            .spawn(move || engine_loop(rx, c, g))
+            .spawn(move || engine_loop(rx, c, g, p))
             .map_err(|e| format!("Failed to start engine thread: {e}"))?;
 
         Ok(Self {
@@ -156,6 +211,7 @@ impl Engine {
             join_handle: std::sync::Mutex::new(Some(handle)),
             cancel,
             generating,
+            profile,
         })
     }
 
@@ -255,7 +311,12 @@ impl Engine {
 
 // ── Engine thread ────────────────────────────────────
 
-fn engine_loop(rx: mpsc::Receiver<Cmd>, cancel: Arc<AtomicBool>, generating: Arc<AtomicBool>) {
+fn engine_loop(
+    rx: mpsc::Receiver<Cmd>,
+    cancel: Arc<AtomicBool>,
+    generating: Arc<AtomicBool>,
+    profile: Arc<std::sync::Mutex<Option<ModelMemoryProfile>>>,
+) {
     let mut backend = match LlamaBackend::init() {
         Ok(b) => b,
         Err(e) => {
@@ -292,15 +353,20 @@ fn engine_loop(rx: mpsc::Receiver<Cmd>, cancel: Arc<AtomicBool>, generating: Arc
                         let size = std::fs::metadata(&path).map(|m| m.len()).unwrap_or(0);
                         let context_length = model.n_ctx_train();
                         let info = ModelInfo {
-                            model_id,
+                            model_id: model_id.clone(),
                             path,
                             size,
                             context_length,
                         };
+                        let mem_profile = build_memory_profile(&model, &model_id, size);
                         log::info!(
-                            "Model loaded ({} MB, n_ctx_train={context_length})",
-                            size / 1_048_576
+                            "Model loaded ({} MB, n_ctx_train={context_length}, kv={} KB/tok)",
+                            size / 1_048_576,
+                            mem_profile.kv_bytes_per_token / 1024
                         );
+                        if let Ok(mut slot) = profile.lock() {
+                            *slot = Some(mem_profile);
+                        }
                         loaded = Some((model, info.clone()));
                         resp.send(Ok(info)).ok();
                     }
@@ -314,6 +380,9 @@ fn engine_loop(rx: mpsc::Receiver<Cmd>, cancel: Arc<AtomicBool>, generating: Arc
 
             Cmd::Unload { resp } => {
                 loaded = None;
+                if let Ok(mut slot) = profile.lock() {
+                    *slot = None;
+                }
                 log::info!("Model unloaded");
                 resp.send(Ok(())).ok();
             }
@@ -397,6 +466,9 @@ fn engine_loop(rx: mpsc::Receiver<Cmd>, cancel: Arc<AtomicBool>, generating: Arc
             Cmd::Shutdown => {
                 log::info!("Engine thread: dropping model and exiting");
                 loaded = None;
+                if let Ok(mut slot) = profile.lock() {
+                    *slot = None;
+                }
                 break;
             }
         }
@@ -865,12 +937,114 @@ fn build_prompt_chatml(
 
 const BATCH_SIZE: usize = 512;
 const MIN_N_CTX: u32 = 512;
+/// Round lazy KV-cache allocations up to this many tokens so the
+/// context isn't recreated for every single new message.
+const N_CTX_CHUNK: u32 = 1024;
+/// Extra slack added to `prompt + max_gen` when sizing the lazy context.
+const N_CTX_SAFETY: u32 = 128;
+/// Static overhead for inference scratch buffers + the UI process. Used
+/// when computing the per-model recommendation. Empirical, conservative.
+const PROCESS_OVERHEAD_BYTES: u64 = 1_500_000_000;
 
-fn resolve_context_size(model: &LlamaModel, n_ctx_cap: Option<u32>) -> u32 {
-    let trained = model.n_ctx_train().max(MIN_N_CTX);
+fn build_memory_profile(
+    model: &LlamaModel,
+    model_id: &str,
+    weights_bytes: u64,
+) -> ModelMemoryProfile {
+    let n_layer = model.n_layer().max(0) as u32;
+    let n_head = (model.n_head().max(1)) as u32;
+    let n_head_kv = (model.n_head_kv().max(1)) as u32;
+    let n_embd = model.n_embd().max(0) as u32;
+    let n_ctx_train = model.n_ctx_train();
+
+    // KV cache (default F16): 2 (K + V) × n_layer × (n_embd × n_head_kv / n_head) × 2 bytes
+    // The (n_head_kv / n_head) ratio reflects grouped-query attention.
+    let kv_per_layer = (n_embd as u64).saturating_mul(n_head_kv as u64) / n_head.max(1) as u64;
+    let kv_bytes_per_token = 2u64
+        .saturating_mul(n_layer as u64)
+        .saturating_mul(kv_per_layer)
+        .saturating_mul(2);
+
+    ModelMemoryProfile {
+        model_id: model_id.to_string(),
+        weights_bytes,
+        kv_bytes_per_token,
+        n_layer,
+        n_head,
+        n_head_kv,
+        n_embd,
+        n_ctx_train,
+    }
+}
+
+/// Maximum n_ctx the user is allowed to allocate (the upper bound),
+/// independent of how big the current prompt actually is.
+fn resolve_context_cap(n_ctx_train: u32, n_ctx_cap: Option<u32>) -> u32 {
+    let trained = n_ctx_train.max(MIN_N_CTX);
     match n_ctx_cap {
         Some(cap) if cap > 0 => trained.min(cap).max(MIN_N_CTX),
         _ => trained,
+    }
+}
+
+/// Lazy KV-cache size: only allocate what the current prompt + reply
+/// actually needs, rounded up to a chunk so we don't recreate the
+/// context every message. Bounded above by `resolve_context_cap`.
+fn compute_lazy_n_ctx(
+    n_ctx_train: u32,
+    n_ctx_cap: Option<u32>,
+    n_prompt: u32,
+    max_gen_tokens: u32,
+) -> u32 {
+    let upper_bound = resolve_context_cap(n_ctx_train, n_ctx_cap);
+
+    let needed = n_prompt
+        .saturating_add(max_gen_tokens)
+        .saturating_add(N_CTX_SAFETY);
+    let needed_rounded = needed
+        .div_ceil(N_CTX_CHUNK)
+        .saturating_mul(N_CTX_CHUNK)
+        .max(MIN_N_CTX);
+
+    needed_rounded.min(upper_bound)
+}
+
+/// Translate a memory budget into a recommended n_ctx ceiling for the
+/// loaded model. Pure function — no side effects.
+pub fn compute_context_budget(
+    profile: &ModelMemoryProfile,
+    total_ram: u64,
+    available_ram: u64,
+    system_reserve_bytes: u64,
+) -> ContextBudget {
+    // Headroom assuming the system is at rest (model loaded, no other
+    // heavy apps running). This is a stable number that doesn't jitter
+    // as the user opens unrelated apps.
+    let kv_budget = total_ram
+        .saturating_sub(system_reserve_bytes)
+        .saturating_sub(profile.weights_bytes)
+        .saturating_sub(PROCESS_OVERHEAD_BYTES);
+
+    let recommended = if profile.kv_bytes_per_token > 0 {
+        let raw = (kv_budget / profile.kv_bytes_per_token) as u32;
+        // Snap down to a nice round value the user can recognise.
+        let rounded = (raw / 1024) * 1024;
+        rounded.min(profile.n_ctx_train)
+    } else {
+        profile.n_ctx_train
+    };
+
+    ContextBudget {
+        model_id: profile.model_id.clone(),
+        system_reserve_bytes,
+        total_ram_bytes: total_ram,
+        available_ram_bytes: available_ram,
+        model_weights_bytes: profile.weights_bytes,
+        kv_bytes_per_token: profile.kv_bytes_per_token,
+        process_overhead_bytes: PROCESS_OVERHEAD_BYTES,
+        kv_budget_bytes: kv_budget,
+        recommended_max_ctx: recommended,
+        n_ctx_train: profile.n_ctx_train,
     }
 }
 
@@ -888,11 +1062,14 @@ fn estimate_context_usage(
         .str_to_token(&prompt, AddBos::Always)
         .map_err(|e| format!("Tokenization failed: {e}"))?;
     let prompt_tokens = tokens.len() as u32;
-    let n_ctx = resolve_context_size(model, n_ctx_cap);
+    let n_ctx_train = model.n_ctx_train();
+    let n_ctx = resolve_context_cap(n_ctx_train, n_ctx_cap);
+    let n_ctx_alloc = compute_lazy_n_ctx(n_ctx_train, n_ctx_cap, prompt_tokens, max_gen_tokens);
     Ok(ContextUsage {
         prompt_tokens,
         n_ctx,
-        n_ctx_train: model.n_ctx_train(),
+        n_ctx_alloc,
+        n_ctx_train,
         max_gen_tokens,
         overflow: prompt_tokens >= n_ctx,
     })
@@ -918,19 +1095,23 @@ fn run_inference(
         .map_err(|e| format!("Tokenization failed: {e}"))?;
 
     let n_prompt = tokens.len() as i32;
-    let n_ctx = resolve_context_size(model, n_ctx_cap);
+    let n_ctx_train = model.n_ctx_train();
+    let max_gen_tokens = params.max_tokens.max(0) as u32;
+    let n_ctx_cap_value = resolve_context_cap(n_ctx_train, n_ctx_cap);
+    let n_ctx_alloc =
+        compute_lazy_n_ctx(n_ctx_train, n_ctx_cap, n_prompt as u32, max_gen_tokens);
 
     log::info!(
-        "Inference n_ctx={n_ctx} (n_ctx_train={}, cap={n_ctx_cap:?}), n_prompt_tokens={n_prompt}",
-        model.n_ctx_train()
+        "Inference n_ctx_alloc={n_ctx_alloc} (cap={n_ctx_cap_value}, n_ctx_train={n_ctx_train}, user_cap={n_ctx_cap:?}), n_prompt_tokens={n_prompt}, max_gen={max_gen_tokens}"
     );
 
     let usage = ContextUsage {
         prompt_tokens: n_prompt as u32,
-        n_ctx,
-        n_ctx_train: model.n_ctx_train(),
-        max_gen_tokens: params.max_tokens.max(0) as u32,
-        overflow: n_prompt as u32 >= n_ctx,
+        n_ctx: n_ctx_cap_value,
+        n_ctx_alloc,
+        n_ctx_train,
+        max_gen_tokens,
+        overflow: n_prompt as u32 >= n_ctx_cap_value,
     };
     let _ = app_handle.emit(
         "chat:context",
@@ -940,14 +1121,14 @@ fn run_inference(
         }),
     );
 
-    if n_prompt as u32 >= n_ctx {
+    if n_prompt as u32 >= n_ctx_alloc {
         return Err(format!(
-            "Prompt exceeds context window ({n_prompt} tokens >= {n_ctx} n_ctx)"
+            "Prompt exceeds context window ({n_prompt} tokens >= {n_ctx_alloc} n_ctx; cap={n_ctx_cap_value})"
         ));
     }
 
     let ctx_params = LlamaContextParams::default().with_n_ctx(Some(
-        NonZeroU32::new(n_ctx).expect("n_ctx >= MIN_N_CTX"),
+        NonZeroU32::new(n_ctx_alloc).expect("n_ctx_alloc >= MIN_N_CTX"),
     ));
 
     let mut ctx = model
@@ -987,7 +1168,7 @@ fn run_inference(
     let mut output = String::new();
     let mut decoder = encoding_rs::UTF_8.new_decoder();
     let mut n_cur = tokens.len() as i32;
-    let n_ctx_i = n_ctx as i32;
+    let n_ctx_i = n_ctx_alloc as i32;
     let n_max = (n_prompt + params.max_tokens).min(n_ctx_i);
     let mut in_tool_call = false;
 

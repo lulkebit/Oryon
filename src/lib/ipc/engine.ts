@@ -73,8 +73,11 @@ export interface ProcessStats {
 export interface ContextUsage {
   /** Tokens the rendered prompt currently occupies. */
   promptTokens: number
-  /** Effective context window after applying any user cap. */
+  /** Effective context window after applying any user cap (the upper bound). */
   nCtx: number
+  /** Tokens currently allocated for the KV cache. With lazy allocation
+   *  this grows on demand and is usually smaller than `nCtx`. */
+  nCtxAlloc: number
   /** Raw context length the model was trained for. */
   nCtxTrain: number
   /** Reserved budget for the next generation. */
@@ -83,11 +86,30 @@ export interface ContextUsage {
   overflow: boolean
 }
 
+export interface ContextBudget {
+  modelId: string
+  systemReserveBytes: number
+  totalRamBytes: number
+  availableRamBytes: number
+  modelWeightsBytes: number
+  kvBytesPerToken: number
+  processOverheadBytes: number
+  kvBudgetBytes: number
+  recommendedMaxCtx: number
+  nCtxTrain: number
+}
+
 export async function estimateContext(
   chatId: string
 ): Promise<ContextUsage> {
   const { invoke } = await import('@tauri-apps/api/core')
   return invoke('estimate_context', { chatId })
+}
+
+export async function getContextBudget(): Promise<ContextBudget | null> {
+  if (!isTauri) return null
+  const { invoke } = await import('@tauri-apps/api/core')
+  return invoke('get_context_budget')
 }
 
 export async function getProcessStats(): Promise<ProcessStats | null> {
