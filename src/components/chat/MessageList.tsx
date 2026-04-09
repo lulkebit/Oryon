@@ -5,6 +5,7 @@ import { MessageBubble } from './MessageBubble'
 import { MarkdownContent } from './MarkdownContent'
 import { ToolCallBubble } from './ToolCallBubble'
 import { ThinkingBubble, parseThinkContent } from './ThinkingBubble'
+import { CollapsedToolBlock, splitToolCallBlocks } from './CollapsedToolBlock'
 
 interface MessageListProps {
   messages: Message[]
@@ -79,6 +80,8 @@ export const MessageList = ({
             {streamingContent ? (
               (() => {
                 const { thinkingBlocks, thinkingOpen, rest } = parseThinkContent(streamingContent)
+                const segments = splitToolCallBlocks(rest)
+                const hasText = segments.some((s) => s.type === 'markdown' && s.text)
                 return (
                   <div style={{ maxWidth: '95%' }}>
                     {thinkingBlocks.map((block, i) => (
@@ -88,22 +91,51 @@ export const MessageList = ({
                         isOpen={thinkingOpen && i === thinkingBlocks.length - 1}
                       />
                     ))}
-                    {rest && (
-                      <>
-                        <MarkdownContent content={rest} />
-                        <span
-                          className="inline-block animate-pulse"
-                          style={{
-                            width: '2px',
-                            height: '14px',
-                            marginLeft: '1px',
-                            verticalAlign: 'text-bottom',
-                            background: 'var(--accent)',
-                          }}
-                        />
-                      </>
+                    {segments.map((seg, i) => {
+                      if (seg.type === 'toolcall') {
+                        return (
+                          <CollapsedToolBlock
+                            key={i}
+                            success={seg.success}
+                            toolName={seg.toolName}
+                            argSummary={seg.argSummary}
+                            duration={seg.duration}
+                            output={seg.output}
+                          />
+                        )
+                      }
+                      if (!seg.text) return null
+                      const isLast = i === segments.length - 1
+                      return (
+                        <span key={i} style={{ display: 'block' }}>
+                          <MarkdownContent content={seg.text} />
+                          {isLast && (
+                            <span
+                              className="inline-block animate-pulse"
+                              style={{
+                                width: '2px',
+                                height: '14px',
+                                marginLeft: '1px',
+                                verticalAlign: 'text-bottom',
+                                background: 'var(--accent)',
+                              }}
+                            />
+                          )}
+                        </span>
+                      )
+                    })}
+                    {!hasText && !thinkingOpen && segments.every((s) => s.type === 'toolcall') && (
+                      <span
+                        className="inline-block animate-pulse"
+                        style={{
+                          width: '2px',
+                          height: '14px',
+                          marginLeft: '1px',
+                          verticalAlign: 'text-bottom',
+                          background: 'var(--accent)',
+                        }}
+                      />
                     )}
-                    {!rest && thinkingOpen && null}
                   </div>
                 )
               })()

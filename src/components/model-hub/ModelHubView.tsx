@@ -22,6 +22,8 @@ import type { HfModelResult, GgufFile, StoredModel } from '@/lib/ipc/hub'
 import type { ProcessStats, HardwareInfo } from '@/lib/ipc/engine'
 import { getProcessStats, getHardwareInfo } from '@/lib/ipc/engine'
 
+/* ─── Helpers ─────────────────────────────────────────── */
+
 function formatBytes(bytes: number): string {
   if (bytes === 0) return '—'
   const units = ['B', 'KB', 'MB', 'GB', 'TB']
@@ -43,15 +45,78 @@ function formatSpeed(bps: number): string {
   return `${(bps / Math.pow(1024, i)).toFixed(1)} ${units[i]}`
 }
 
-function modelDisplayName(id: string): string {
-  return id.split('/').pop() ?? id
+function cleanModelName(id: string): string {
+  const name = id.split('/').pop() ?? id
+  return name
+    .replace(/-GGUF$/i, '')
+    .replace(/_GGUF$/i, '')
+    .replace(/[-_]/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim()
+}
+
+function extractParamCount(name: string): string | null {
+  const m = name.match(/\b(\d+(?:\.\d+)?)\s*[Bb]\b/)
+  if (m) return `${m[1]}B`
+  const size = name.match(/\b(mini|small|large|medium|tiny|nano)\b/i)
+  if (size) return size[1].charAt(0).toUpperCase() + size[1].slice(1).toLowerCase()
+  return null
+}
+
+interface QuantInfo {
+  label: string
+  detail: string
+  isRecommended: boolean
+}
+
+function quantLabel(quant: string | null | undefined): QuantInfo {
+  if (!quant) return { label: 'Standard', detail: '', isRecommended: false }
+  const q = quant.toUpperCase()
+  if (q === 'Q4_K_M')
+    return { label: 'Recommended', detail: '4-bit balanced', isRecommended: true }
+  if (q === 'Q5_K_M')
+    return { label: 'High Quality', detail: '5-bit', isRecommended: true }
+  if (q === 'Q4_K_S')
+    return { label: 'Compact', detail: '4-bit small', isRecommended: false }
+  if (q === 'Q4_0' || q === 'Q4_1')
+    return { label: 'Compact', detail: '4-bit', isRecommended: false }
+  if (q.startsWith('Q3'))
+    return { label: 'Very Compact', detail: '3-bit', isRecommended: false }
+  if (q.startsWith('Q2'))
+    return { label: 'Smallest', detail: '2-bit', isRecommended: false }
+  if (q.startsWith('IQ')) {
+    const bits = q.match(/IQ(\d)/)?.[1]
+    return {
+      label: bits ? `Smallest (${bits}-bit)` : 'Smallest',
+      detail: 'Compressed',
+      isRecommended: false,
+    }
+  }
+  if (q === 'Q6_K')
+    return { label: 'Very High Quality', detail: '6-bit', isRecommended: false }
+  if (q.startsWith('Q8'))
+    return { label: 'Near Lossless', detail: '8-bit', isRecommended: false }
+  if (q.startsWith('F16') || q.startsWith('BF16'))
+    return { label: 'Full Precision', detail: '16-bit', isRecommended: false }
+  if (q.startsWith('F32'))
+    return { label: 'Full Precision', detail: '32-bit', isRecommended: false }
+  return { label: quant, detail: '', isRecommended: false }
+}
+
+function bestFile(files: GgufFile[]): GgufFile | undefined {
+  return (
+    files.find((f) => f.quantization === 'Q4_K_M') ??
+    files.find((f) => f.quantization === 'Q4_K_S') ??
+    files.find((f) => f.quantization === 'Q5_K_M') ??
+    files[0]
+  )
 }
 
 const AUTHOR_COLORS = [
   '#6366f1', '#8b5cf6', '#a855f7', '#d946ef',
   '#ec4899', '#f43f5e', '#ef4444', '#f97316',
   '#eab308', '#84cc16', '#22c55e', '#14b8a6',
-  '#06b6d4', '#0ea5e9', '#3b82f6', '#6366f1',
+  '#06b6d4', '#0ea5e9', '#3b82f6',
 ]
 
 function authorColor(name: string): string {
@@ -69,50 +134,35 @@ function authorInitials(name: string): string {
   return name.slice(0, 2).toUpperCase()
 }
 
-const AuthorAvatar = memo(
-  ({ author, size = 24 }: { author: string; size?: number }) => {
-    const [imgError, setImgError] = useState(false)
-    const color = authorColor(author)
-    const initials = authorInitials(author)
-    const avatarUrl = `https://huggingface.co/${author}/resolve/main/avatar.png`
+/* ─── Author Avatar ───────────────────────────────────── */
 
-    if (imgError || !author) {
-      return (
-        <div
-          className="flex shrink-0 items-center justify-center"
-          style={{
-            width: size,
-            height: size,
-            borderRadius: size > 28 ? '10px' : '6px',
-            background: `${color}20`,
-            color,
-            fontSize: size * 0.4,
-            fontWeight: 700,
-            letterSpacing: '-0.02em',
-          }}
-        >
-          {initials}
-        </div>
-      )
-    }
-
-    return (
-      <img
-        src={avatarUrl}
-        alt={author}
-        onError={() => setImgError(true)}
-        style={{
-          width: size,
-          height: size,
-          borderRadius: size > 28 ? '10px' : '6px',
-          objectFit: 'cover',
-          flexShrink: 0,
-        }}
-      />
-    )
-  }
-)
+const AuthorAvatar = memo(({ author, size = 24 }: { author: string; size?: number }) => {
+  const color = authorColor(author)
+  const initials = authorInitials(author)
+  return (
+    <div
+      className="flex shrink-0 items-center justify-center"
+      style={{
+        width: size,
+        height: size,
+        borderRadius: '50%',
+        background: `${color}18`,
+        border: `1.5px solid ${color}30`,
+        color,
+        fontSize: Math.max(9, Math.round(size * 0.36)),
+        fontWeight: 700,
+        letterSpacing: '-0.02em',
+        flexShrink: 0,
+        userSelect: 'none',
+      }}
+    >
+      {initials}
+    </div>
+  )
+})
 AuthorAvatar.displayName = 'AuthorAvatar'
+
+/* ─── Main View ───────────────────────────────────────── */
 
 export const ModelHubView = () => {
   const { setActiveView } = useUiStore()
@@ -150,9 +200,7 @@ export const ModelHubView = () => {
     (value: string) => {
       setQuery(value)
       if (searchTimeout.current) clearTimeout(searchTimeout.current)
-      searchTimeout.current = setTimeout(() => {
-        search(value)
-      }, 400)
+      searchTimeout.current = setTimeout(() => search(value), 400)
     },
     [setQuery, search]
   )
@@ -163,36 +211,17 @@ export const ModelHubView = () => {
     <div className="flex h-full flex-col">
       <div
         className="flex items-center justify-between border-b"
-        style={{
-          height: '52px',
-          padding: '0 24px',
-          borderColor: 'var(--border-subtle)',
-        }}
+        style={{ height: '52px', padding: '0 24px', borderColor: 'var(--border-subtle)' }}
       >
-        <h1
-          style={{
-            fontSize: '14px',
-            fontWeight: 600,
-            color: 'var(--text-primary)',
-          }}
-        >
+        <h1 style={{ fontSize: '14px', fontWeight: 600, color: 'var(--text-primary)' }}>
           Model Hub
         </h1>
         <button
           onClick={() => setActiveView('chat')}
           className="flex items-center justify-center btn-press"
-          style={{
-            width: '32px',
-            height: '32px',
-            borderRadius: '6px',
-            color: 'var(--text-muted)',
-          }}
-          onMouseEnter={(e) => {
-            e.currentTarget.style.background = 'var(--bg-overlay)'
-          }}
-          onMouseLeave={(e) => {
-            e.currentTarget.style.background = 'transparent'
-          }}
+          style={{ width: '32px', height: '32px', borderRadius: '6px', color: 'var(--text-muted)' }}
+          onMouseEnter={(e) => { e.currentTarget.style.background = 'var(--bg-overlay)' }}
+          onMouseLeave={(e) => { e.currentTarget.style.background = 'transparent' }}
           aria-label="Close Model Hub"
         >
           <CloseCircle size={18} color="currentColor" />
@@ -203,21 +232,13 @@ export const ModelHubView = () => {
         className="flex items-center border-b"
         style={{ padding: '0 24px', borderColor: 'var(--border-subtle)' }}
       >
-        <TabButton
-          active={tab === 'explore'}
-          onClick={() => setTab('explore')}
-          label="Explore"
-        />
+        <TabButton active={tab === 'explore'} onClick={() => setTab('explore')} label="Explore" />
         <TabButton
           active={tab === 'downloaded'}
           onClick={() => setTab('downloaded')}
-          label={`My Models (${downloadedModels.length})`}
+          label={`My Models${downloadedModels.length > 0 ? ` (${downloadedModels.length})` : ''}`}
         />
-        <TabButton
-          active={tab === 'usage'}
-          onClick={() => setTab('usage')}
-          label="Usage"
-        />
+        <TabButton active={tab === 'usage'} onClick={() => setTab('usage')} label="Usage" />
       </div>
 
       {tab === 'explore' && (
@@ -236,15 +257,15 @@ export const ModelHubView = () => {
           error={error}
         />
       )}
-
       {tab === 'downloaded' && (
         <DownloadedTab models={downloadedModels} onDelete={removeModel} />
       )}
-
       {tab === 'usage' && <UsageTab />}
     </div>
   )
 }
+
+/* ─── Tab Button ──────────────────────────────────────── */
 
 function TabButton({
   active,
@@ -264,9 +285,7 @@ function TabButton({
         fontSize: '13px',
         fontWeight: active ? 600 : 400,
         color: active ? 'var(--text-primary)' : 'var(--text-muted)',
-        borderBottom: active
-          ? '2px solid var(--accent)'
-          : '2px solid transparent',
+        borderBottom: active ? '2px solid var(--accent)' : '2px solid transparent',
       }}
     >
       {label}
@@ -274,7 +293,7 @@ function TabButton({
   )
 }
 
-/* ─── Explore ─────────────────────────────────────── */
+/* ─── Explore Tab ─────────────────────────────────────── */
 
 function ExploreTab({
   query,
@@ -318,7 +337,7 @@ function ExploreTab({
             height: '40px',
             gap: '8px',
             padding: '0 14px',
-            borderRadius: '12px',
+            borderRadius: '10px',
             background: 'var(--bg-elevated)',
             border: '1px solid var(--border-subtle)',
             transition: 'border-color 150ms var(--ease-out)',
@@ -329,7 +348,7 @@ function ExploreTab({
             type="text"
             value={query}
             onChange={(e) => onQueryChange(e.target.value)}
-            placeholder="Search GGUF models on Hugging Face..."
+            placeholder="Search models..."
             className="flex-1 bg-transparent outline-none"
             style={{ fontSize: '13px', color: 'var(--text-primary)' }}
           />
@@ -337,8 +356,7 @@ function ExploreTab({
           {isSearchActive && (
             <button
               onClick={() => onQueryChange('')}
-              className="flex items-center justify-center"
-              style={{ color: 'var(--text-muted)' }}
+              style={{ color: 'var(--text-muted)', display: 'flex', alignItems: 'center' }}
               aria-label="Clear search"
             >
               <CloseCircle size={16} color="currentColor" />
@@ -390,7 +408,7 @@ function ExploreTab({
   )
 }
 
-/* ─── Browse Grid ─────────────────────────────────── */
+/* ─── Browse Grid ─────────────────────────────────────── */
 
 function BrowseGrid({
   featured,
@@ -402,7 +420,7 @@ function BrowseGrid({
   activeDownload: { repoId: string; filename: string } | null
 }) {
   return (
-    <div className="flex-1 overflow-y-auto" style={{ padding: '16px 0 32px' }}>
+    <div className="flex-1 overflow-y-auto" style={{ padding: '20px 0 32px' }}>
       {featured.map((cat) => (
         <CategorySection
           key={cat.id}
@@ -429,22 +447,22 @@ function CategorySection({
   if (category.results.length === 0 && !category.loading) return null
 
   const scrollBy = (dir: number) => {
-    scrollRef.current?.scrollBy({ left: dir * 320, behavior: 'smooth' })
+    scrollRef.current?.scrollBy({ left: dir * 290, behavior: 'smooth' })
   }
 
   return (
-    <div style={{ marginBottom: '28px' }}>
+    <div style={{ marginBottom: '32px' }}>
       <div
         className="flex items-center justify-between"
-        style={{ padding: '0 24px', marginBottom: '12px' }}
+        style={{ padding: '0 24px', marginBottom: '14px' }}
       >
         <div>
           <h2
             style={{
-              fontSize: '16px',
+              fontSize: '14px',
               fontWeight: 600,
               color: 'var(--text-primary)',
-              lineHeight: '24px',
+              lineHeight: '20px',
             }}
           >
             {category.label}
@@ -453,7 +471,8 @@ function CategorySection({
             style={{
               fontSize: '12px',
               color: 'var(--text-muted)',
-              marginTop: '2px',
+              marginTop: '1px',
+              lineHeight: '16px',
             }}
           >
             {category.description}
@@ -466,18 +485,15 @@ function CategorySection({
       </div>
 
       {category.loading && (
-        <div
-          className="flex"
-          style={{ gap: '12px', paddingLeft: '24px', overflow: 'hidden' }}
-        >
+        <div className="flex" style={{ gap: '10px', paddingLeft: '24px', overflow: 'hidden' }}>
           {[0, 1, 2, 3].map((i) => (
             <div
               key={i}
               className="animate-pulse"
               style={{
-                width: '300px',
-                height: '160px',
-                borderRadius: '12px',
+                width: '272px',
+                height: '192px',
+                borderRadius: '14px',
                 background: 'var(--bg-elevated)',
                 flexShrink: 0,
               }}
@@ -490,11 +506,7 @@ function CategorySection({
         <div
           ref={scrollRef}
           className="hide-scrollbar flex"
-          style={{
-            gap: '12px',
-            overflowX: 'auto',
-            scrollSnapType: 'x mandatory',
-          }}
+          style={{ gap: '10px', overflowX: 'auto', scrollSnapType: 'x mandatory' }}
         >
           <div style={{ minWidth: '24px', flexShrink: 0 }} />
           {category.results.map((model) => (
@@ -533,17 +545,15 @@ function ScrollButton({
         background: 'var(--bg-elevated)',
         border: '1px solid var(--border-subtle)',
       }}
-      onMouseEnter={(e) => {
-        e.currentTarget.style.background = 'var(--bg-overlay)'
-      }}
-      onMouseLeave={(e) => {
-        e.currentTarget.style.background = 'var(--bg-elevated)'
-      }}
+      onMouseEnter={(e) => { e.currentTarget.style.background = 'var(--bg-overlay)' }}
+      onMouseLeave={(e) => { e.currentTarget.style.background = 'var(--bg-elevated)' }}
     >
       <Icon size={14} color="currentColor" />
     </button>
   )
 }
+
+/* ─── Browse Model Card ───────────────────────────────── */
 
 function BrowseModelCard({
   model,
@@ -554,32 +564,30 @@ function BrowseModelCard({
   onDownload: (repoId: string, filename: string) => void
   activeDownload: { repoId: string; filename: string } | null
 }) {
-  const [expanded, setExpanded] = useState(false)
+  const [showFiles, setShowFiles] = useState(false)
   const isDownloadingFromThis = activeDownload?.repoId === model.id
-  const recommended =
-    model.files.find(
-      (f) =>
-        f.quantization === 'Q4_K_M' ||
-        f.quantization === 'Q4_K_S' ||
-        f.quantization === 'Q5_K_M'
-    ) ?? model.files[0]
+  const recommended = bestFile(model.files)
+  const cleanName = cleanModelName(model.id)
+  const paramCount = extractParamCount(cleanName)
+  const sortedFiles = [...model.files].sort((a, b) => (a.size || 0) - (b.size || 0))
 
   return (
     <div
-      className="flex flex-col border btn-press"
+      className="flex flex-col border"
       style={{
-        width: '300px',
+        width: '272px',
         flexShrink: 0,
-        borderRadius: '12px',
+        borderRadius: '14px',
         borderColor: 'var(--border-subtle)',
         background: 'var(--bg-surface)',
         scrollSnapAlign: 'start',
         overflow: 'hidden',
       }}
     >
-      <div style={{ padding: '14px 16px 0' }}>
-        <div className="flex items-start" style={{ gap: '10px' }}>
-          <AuthorAvatar author={model.author ?? ''} size={32} />
+      {/* Header */}
+      <div style={{ padding: '16px 16px 14px' }}>
+        <div className="flex items-start" style={{ gap: '10px', marginBottom: '12px' }}>
+          <AuthorAvatar author={model.author ?? ''} size={40} />
           <div style={{ flex: 1, minWidth: 0 }}>
             <p
               style={{
@@ -591,231 +599,240 @@ function BrowseModelCard({
                 whiteSpace: 'nowrap',
                 lineHeight: '18px',
               }}
-              title={model.id}
+              title={cleanName}
             >
-              {modelDisplayName(model.id)}
+              {cleanName}
             </p>
-            <p
-              style={{
-                fontSize: '11px',
-                color: 'var(--text-muted)',
-                overflow: 'hidden',
-                textOverflow: 'ellipsis',
-                whiteSpace: 'nowrap',
-                lineHeight: '16px',
-              }}
+            <div
+              className="flex items-center"
+              style={{ gap: '5px', marginTop: '3px' }}
             >
-              {model.author ?? 'Unknown'}
-            </p>
+              <span
+                style={{
+                  fontSize: '11px',
+                  color: 'var(--text-muted)',
+                  overflow: 'hidden',
+                  textOverflow: 'ellipsis',
+                  whiteSpace: 'nowrap',
+                }}
+              >
+                {model.author}
+              </span>
+              {paramCount && (
+                <span
+                  style={{
+                    padding: '0 5px',
+                    height: '16px',
+                    display: 'inline-flex',
+                    alignItems: 'center',
+                    borderRadius: '4px',
+                    fontSize: '10px',
+                    fontWeight: 600,
+                    background: 'var(--bg-overlay)',
+                    color: 'var(--text-secondary)',
+                    flexShrink: 0,
+                  }}
+                >
+                  {paramCount}
+                </span>
+              )}
+            </div>
           </div>
         </div>
 
+        {/* Stats */}
         <div
           className="flex items-center"
-          style={{
-            gap: '12px',
-            marginTop: '10px',
-            fontSize: '11px',
-            color: 'var(--text-muted)',
-          }}
+          style={{ gap: '10px', fontSize: '11px', color: 'var(--text-muted)' }}
         >
-          <span className="flex items-center" style={{ gap: '4px' }}>
-            <ArrowDown2 size={11} color="currentColor" />
+          <span className="flex items-center" style={{ gap: '3px' }}>
+            <ArrowDown2 size={10} color="currentColor" />
             {formatNumber(model.downloads)}
           </span>
           {(model.likes ?? 0) > 0 && (
-            <span className="flex items-center" style={{ gap: '4px' }}>
-              <Heart size={11} color="currentColor" />
+            <span className="flex items-center" style={{ gap: '3px' }}>
+              <Heart size={10} color="currentColor" />
               {formatNumber(model.likes)}
             </span>
           )}
-          <span>{model.files.length} file{model.files.length !== 1 ? 's' : ''}</span>
+          <span style={{ marginLeft: 'auto' }}>
+            {model.files.length} {model.files.length === 1 ? 'size' : 'sizes'}
+          </span>
         </div>
       </div>
 
-      <div style={{ padding: '10px 16px' }}>
-        {!expanded ? (
-          <div className="flex" style={{ gap: '4px', flexWrap: 'wrap' }}>
-            {model.files.slice(0, 3).map((f) => (
-              <QuantTag key={f.filename} file={f} />
-            ))}
-            {model.files.length > 3 && (
-              <button
-                onClick={() => setExpanded(true)}
-                style={{
-                  fontSize: '10px',
-                  color: 'var(--accent)',
-                  background: 'none',
-                  border: 'none',
-                  padding: '2px 4px',
-                  fontWeight: 500,
-                }}
-              >
-                +{model.files.length - 3} more
-              </button>
-            )}
-          </div>
-        ) : (
-          <div
-            className="flex flex-col"
-            style={{ gap: '4px', maxHeight: '140px', overflowY: 'auto' }}
-          >
-            {model.files.map((f) => (
-              <FileRow
-                key={f.filename}
-                file={f}
-                repoId={model.id}
-                onDownload={onDownload}
-                isDownloading={
-                  isDownloadingFromThis &&
-                  activeDownload?.filename === f.filename
-                }
-                disabled={!!activeDownload}
-              />
-            ))}
-          </div>
-        )}
-      </div>
+      {/* Divider */}
+      <div style={{ height: '1px', background: 'var(--border-subtle)' }} />
 
-      <div style={{ padding: '0 16px 14px', marginTop: 'auto' }}>
-        {!expanded ? (
-          <div className="flex" style={{ gap: '8px' }}>
+      {/* File section */}
+      {!showFiles ? (
+        <div style={{ padding: '12px 16px 14px' }}>
+          {recommended && (
             <button
-              onClick={() => setExpanded(true)}
-              className="flex flex-1 items-center justify-center btn-press"
+              onClick={() => onDownload(model.id, recommended.filename)}
+              disabled={!!activeDownload}
+              className="flex w-full items-center justify-center btn-press"
               style={{
-                height: '32px',
-                borderRadius: '8px',
+                height: '34px',
+                borderRadius: '9px',
+                gap: '6px',
                 fontSize: '12px',
                 fontWeight: 500,
-                background: 'var(--bg-elevated)',
-                color: 'var(--text-secondary)',
-                border: '1px solid var(--border-subtle)',
-              }}
-              onMouseEnter={(e) => {
-                e.currentTarget.style.background = 'var(--bg-overlay)'
-              }}
-              onMouseLeave={(e) => {
-                e.currentTarget.style.background = 'var(--bg-elevated)'
+                background: 'var(--accent)',
+                color: 'var(--text-inverse)',
+                opacity: activeDownload ? 0.5 : 1,
+                marginBottom: '8px',
               }}
             >
-              All files
+              <DocumentDownload size={13} color="currentColor" />
+              Download
+              {recommended.size > 0 && (
+                <span
+                  style={{
+                    opacity: 0.7,
+                    fontFamily: 'var(--font-mono)',
+                    fontSize: '11px',
+                  }}
+                >
+                  · {formatBytes(recommended.size)}
+                </span>
+              )}
             </button>
-            {recommended && (
-              <button
-                onClick={() => onDownload(model.id, recommended.filename)}
-                disabled={!!activeDownload}
-                className="flex flex-1 items-center justify-center btn-press"
-                style={{
-                  height: '32px',
-                  borderRadius: '8px',
-                  fontSize: '12px',
-                  fontWeight: 500,
-                  gap: '4px',
-                  background: 'var(--accent)',
-                  color: 'var(--text-inverse)',
-                  opacity: activeDownload ? 0.5 : 1,
-                }}
-              >
-                <DocumentDownload size={13} color="currentColor" />
-                {recommended.quantization ?? 'GGUF'}
-                {recommended.size > 0 && ` · ${formatBytes(recommended.size)}`}
-              </button>
-            )}
-          </div>
-        ) : (
+          )}
+          {model.files.length > 1 && (
+            <button
+              onClick={() => setShowFiles(true)}
+              className="flex w-full items-center justify-center btn-press"
+              style={{
+                height: '28px',
+                borderRadius: '7px',
+                fontSize: '11px',
+                color: 'var(--text-muted)',
+                background: 'transparent',
+                border: '1px solid var(--border-subtle)',
+              }}
+              onMouseEnter={(e) => { e.currentTarget.style.background = 'var(--bg-elevated)' }}
+              onMouseLeave={(e) => { e.currentTarget.style.background = 'transparent' }}
+            >
+              All {model.files.length} sizes
+            </button>
+          )}
+        </div>
+      ) : (
+        <div
+          style={{
+            padding: '10px 16px 14px',
+            display: 'flex',
+            flexDirection: 'column',
+            gap: '3px',
+          }}
+        >
+          {sortedFiles.map((f) => (
+            <FileOption
+              key={f.filename}
+              file={f}
+              repoId={model.id}
+              onDownload={onDownload}
+              isActive={isDownloadingFromThis && activeDownload?.filename === f.filename}
+              disabled={!!activeDownload}
+            />
+          ))}
           <button
-            onClick={() => setExpanded(false)}
+            onClick={() => setShowFiles(false)}
             className="flex w-full items-center justify-center btn-press"
             style={{
-              height: '32px',
-              borderRadius: '8px',
-              fontSize: '12px',
-              fontWeight: 500,
-              background: 'var(--bg-elevated)',
-              color: 'var(--text-secondary)',
+              height: '28px',
+              borderRadius: '7px',
+              marginTop: '4px',
+              fontSize: '11px',
+              color: 'var(--text-muted)',
+              background: 'transparent',
               border: '1px solid var(--border-subtle)',
             }}
-            onMouseEnter={(e) => {
-              e.currentTarget.style.background = 'var(--bg-overlay)'
-            }}
-            onMouseLeave={(e) => {
-              e.currentTarget.style.background = 'var(--bg-elevated)'
-            }}
+            onMouseEnter={(e) => { e.currentTarget.style.background = 'var(--bg-elevated)' }}
+            onMouseLeave={(e) => { e.currentTarget.style.background = 'transparent' }}
           >
             Collapse
           </button>
-        )}
-      </div>
+        </div>
+      )}
     </div>
   )
 }
 
-function QuantTag({ file }: { file: GgufFile }) {
-  return (
-    <span
-      style={{
-        display: 'inline-flex',
-        alignItems: 'center',
-        height: '20px',
-        padding: '0 6px',
-        borderRadius: '4px',
-        fontSize: '10px',
-        fontWeight: 600,
-        fontFamily: 'var(--font-mono)',
-        color: 'var(--text-secondary)',
-        background: 'var(--bg-elevated)',
-        letterSpacing: '0.02em',
-      }}
-    >
-      {file.quantization ?? 'GGUF'}
-      {file.size > 0 && (
-        <span style={{ marginLeft: '4px', fontWeight: 400, opacity: 0.6 }}>
-          {formatBytes(file.size)}
-        </span>
-      )}
-    </span>
-  )
-}
-
-function FileRow({
+function FileOption({
   file,
   repoId,
   onDownload,
-  isDownloading,
+  isActive,
   disabled,
 }: {
   file: GgufFile
   repoId: string
   onDownload: (repoId: string, filename: string) => void
-  isDownloading: boolean
+  isActive: boolean
   disabled: boolean
 }) {
+  const info = quantLabel(file.quantization)
   return (
-    <div
-      className="flex items-center justify-between"
+    <button
+      onClick={() => onDownload(repoId, file.filename)}
+      disabled={disabled}
+      className="flex items-center btn-press"
       style={{
-        height: '28px',
-        padding: '0 8px',
-        borderRadius: '6px',
-        background: isDownloading ? 'var(--accent-muted)' : 'transparent',
+        width: '100%',
+        padding: '8px 10px',
+        borderRadius: '8px',
+        gap: '8px',
+        background: isActive ? 'var(--accent-muted)' : 'var(--bg-elevated)',
+        border: `1px solid ${isActive ? 'var(--accent)' : 'transparent'}`,
+        opacity: disabled && !isActive ? 0.45 : 1,
+        cursor: disabled ? 'not-allowed' : 'pointer',
+        textAlign: 'left',
       }}
     >
-      <div className="flex items-center" style={{ gap: '6px', flex: 1, minWidth: 0 }}>
-        <span
-          style={{
-            fontSize: '11px',
-            fontWeight: 600,
-            fontFamily: 'var(--font-mono)',
-            color: 'var(--text-secondary)',
-          }}
-        >
-          {file.quantization ?? 'GGUF'}
-        </span>
+      <div style={{ flex: 1, minWidth: 0 }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '5px' }}>
+          <span
+            style={{
+              fontSize: '12px',
+              fontWeight: 500,
+              color: isActive ? 'var(--accent)' : 'var(--text-primary)',
+            }}
+          >
+            {info.label}
+          </span>
+          {info.isRecommended && (
+            <span
+              style={{
+                padding: '0 4px',
+                height: '14px',
+                display: 'inline-flex',
+                alignItems: 'center',
+                borderRadius: '3px',
+                fontSize: '9px',
+                fontWeight: 700,
+                letterSpacing: '0.04em',
+                background: 'var(--accent-muted)',
+                color: 'var(--accent)',
+                textTransform: 'uppercase',
+              }}
+            >
+              Best
+            </span>
+          )}
+        </div>
+        {info.detail && (
+          <div style={{ fontSize: '10px', color: 'var(--text-muted)', marginTop: '1px' }}>
+            {info.detail}
+          </div>
+        )}
+      </div>
+      <div style={{ display: 'flex', alignItems: 'center', gap: '6px', flexShrink: 0 }}>
         {file.size > 0 && (
           <span
             style={{
-              fontSize: '10px',
+              fontSize: '11px',
               color: 'var(--text-muted)',
               fontFamily: 'var(--font-mono)',
             }}
@@ -823,30 +840,16 @@ function FileRow({
             {formatBytes(file.size)}
           </span>
         )}
+        <DocumentDownload
+          size={12}
+          color={isActive ? 'var(--accent)' : 'var(--text-muted)'}
+        />
       </div>
-      <button
-        onClick={() => onDownload(repoId, file.filename)}
-        disabled={disabled}
-        className="flex items-center btn-press"
-        style={{
-          gap: '4px',
-          fontSize: '10px',
-          fontWeight: 500,
-          color: isDownloading ? 'var(--accent)' : 'var(--text-muted)',
-          background: 'none',
-          border: 'none',
-          padding: '2px 4px',
-          opacity: disabled && !isDownloading ? 0.4 : 1,
-        }}
-      >
-        <DocumentDownload size={11} color="currentColor" />
-        {isDownloading ? 'Downloading...' : 'Download'}
-      </button>
-    </div>
+    </button>
   )
 }
 
-/* ─── Search Results ──────────────────────────────── */
+/* ─── Search Results ──────────────────────────────────── */
 
 function SearchResults({
   results,
@@ -861,34 +864,36 @@ function SearchResults({
   onDownload: (repoId: string, filename: string) => void
   activeDownload: { repoId: string; filename: string } | null
 }) {
+  if (results.length === 0 && !searching && query) {
+    return (
+      <div
+        className="flex flex-1 flex-col items-center justify-center"
+        style={{ padding: '48px 0' }}
+      >
+        <SearchNormal1
+          size={32}
+          color="var(--text-muted)"
+          style={{ opacity: 0.25, marginBottom: '12px' }}
+        />
+        <p style={{ fontSize: '13px', color: 'var(--text-muted)' }}>
+          No models found for &ldquo;{query}&rdquo;
+        </p>
+        <p
+          style={{
+            fontSize: '12px',
+            color: 'var(--text-muted)',
+            opacity: 0.6,
+            marginTop: '4px',
+          }}
+        >
+          Try a different search term
+        </p>
+      </div>
+    )
+  }
+
   return (
     <div className="flex-1 overflow-y-auto" style={{ padding: '16px 24px 24px' }}>
-      {results.length === 0 && !searching && query && (
-        <div
-          className="flex flex-col items-center justify-center"
-          style={{ padding: '48px 0' }}
-        >
-          <SearchNormal1
-            size={32}
-            color="var(--text-muted)"
-            style={{ opacity: 0.3, marginBottom: '12px' }}
-          />
-          <p style={{ fontSize: '13px', color: 'var(--text-muted)' }}>
-            No GGUF models found for &ldquo;{query}&rdquo;
-          </p>
-          <p
-            style={{
-              fontSize: '12px',
-              color: 'var(--text-muted)',
-              opacity: 0.6,
-              marginTop: '4px',
-            }}
-          >
-            Try a different search term or browse the categories
-          </p>
-        </div>
-      )}
-
       <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
         {results.map((model) => (
           <SearchModelCard
@@ -912,69 +917,90 @@ function SearchModelCard({
   onDownload: (repoId: string, filename: string) => void
   activeDownload: { repoId: string; filename: string } | null
 }) {
-  const [expanded, setExpanded] = useState(false)
+  const [showAll, setShowAll] = useState(false)
   const isDownloadingFromThis = activeDownload?.repoId === model.id
-  const recommended =
-    model.files.find(
-      (f) =>
-        f.quantization === 'Q4_K_M' ||
-        f.quantization === 'Q4_K_S' ||
-        f.quantization === 'Q5_K_M'
-    ) ?? model.files[0]
+  const recommended = bestFile(model.files)
+  const cleanName = cleanModelName(model.id)
+  const paramCount = extractParamCount(cleanName)
+  const sortedFiles = [...model.files].sort((a, b) => (a.size || 0) - (b.size || 0))
+  const visibleFiles = showAll ? sortedFiles : sortedFiles.slice(0, 5)
 
   return (
     <div
-      className="border btn-press"
       style={{
         borderRadius: '12px',
-        borderColor: 'var(--border-subtle)',
+        border: '1px solid var(--border-subtle)',
         background: 'var(--bg-surface)',
         overflow: 'hidden',
       }}
     >
-      <div style={{ padding: '14px 16px' }}>
-        <div className="flex items-start" style={{ gap: '12px' }}>
-          <AuthorAvatar author={model.author ?? ''} size={36} />
+      <div style={{ padding: '14px 16px 12px' }}>
+        {/* Header row */}
+        <div className="flex items-start" style={{ gap: '12px', marginBottom: '10px' }}>
+          <AuthorAvatar author={model.author ?? ''} size={40} />
           <div style={{ flex: 1, minWidth: 0 }}>
-            <p
-              style={{
-                fontSize: '14px',
-                fontWeight: 600,
-                color: 'var(--text-primary)',
-                overflow: 'hidden',
-                textOverflow: 'ellipsis',
-                whiteSpace: 'nowrap',
-              }}
-            >
-              {modelDisplayName(model.id)}
-            </p>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+              <p
+                style={{
+                  fontSize: '14px',
+                  fontWeight: 600,
+                  color: 'var(--text-primary)',
+                  overflow: 'hidden',
+                  textOverflow: 'ellipsis',
+                  whiteSpace: 'nowrap',
+                }}
+              >
+                {cleanName}
+              </p>
+              {paramCount && (
+                <span
+                  style={{
+                    padding: '0 5px',
+                    height: '16px',
+                    display: 'inline-flex',
+                    alignItems: 'center',
+                    flexShrink: 0,
+                    borderRadius: '4px',
+                    fontSize: '10px',
+                    fontWeight: 600,
+                    background: 'var(--bg-overlay)',
+                    color: 'var(--text-secondary)',
+                  }}
+                >
+                  {paramCount}
+                </span>
+              )}
+            </div>
             <div
-              className="flex items-center"
               style={{
-                gap: '8px',
-                marginTop: '4px',
+                display: 'flex',
+                alignItems: 'center',
+                gap: '6px',
+                marginTop: '3px',
                 fontSize: '12px',
                 color: 'var(--text-muted)',
               }}
             >
               <span>{model.author}</span>
-              <span className="flex items-center" style={{ gap: '4px' }}>
-                <ArrowDown2 size={11} color="currentColor" />
+              <span style={{ opacity: 0.4 }}>·</span>
+              <span className="flex items-center" style={{ gap: '3px' }}>
+                <ArrowDown2 size={10} color="currentColor" />
                 {formatNumber(model.downloads)}
               </span>
               {(model.likes ?? 0) > 0 && (
-                <span className="flex items-center" style={{ gap: '4px' }}>
-                  <Heart size={11} color="currentColor" />
-                  {formatNumber(model.likes)}
-                </span>
+                <>
+                  <span style={{ opacity: 0.4 }}>·</span>
+                  <span className="flex items-center" style={{ gap: '3px' }}>
+                    <Heart size={10} color="currentColor" />
+                    {formatNumber(model.likes)}
+                  </span>
+                </>
               )}
-              <span>
-                {model.files.length} file{model.files.length !== 1 ? 's' : ''}
-              </span>
             </div>
           </div>
 
-          {recommended && !expanded && (
+          {/* Quick download */}
+          {recommended && (
             <button
               onClick={() => onDownload(model.id, recommended.filename)}
               disabled={!!activeDownload}
@@ -991,61 +1017,54 @@ function SearchModelCard({
                 opacity: activeDownload ? 0.5 : 1,
               }}
             >
-              <DocumentDownload size={13} color="currentColor" />
-              {recommended.quantization ?? 'GGUF'}
+              <DocumentDownload size={12} color="currentColor" />
+              {recommended.size > 0 ? formatBytes(recommended.size) : 'Download'}
             </button>
           )}
         </div>
 
-        <div
-          className="flex items-center"
-          style={{ gap: '4px', marginTop: '10px', flexWrap: 'wrap' }}
-        >
-          {model.files.slice(0, expanded ? undefined : 6).map((f) => (
+        {/* File chips */}
+        <div style={{ display: 'flex', gap: '4px', flexWrap: 'wrap' }}>
+          {visibleFiles.map((f) => {
+            const info = quantLabel(f.quantization)
+            const isActive = isDownloadingFromThis && activeDownload?.filename === f.filename
+            return (
+              <button
+                key={f.filename}
+                onClick={() => onDownload(model.id, f.filename)}
+                disabled={!!activeDownload}
+                className="flex items-center btn-press"
+                style={{
+                  height: '26px',
+                  padding: '0 8px',
+                  borderRadius: '6px',
+                  gap: '4px',
+                  fontSize: '11px',
+                  fontWeight: 500,
+                  background: isActive ? 'var(--accent-muted)' : 'var(--bg-elevated)',
+                  border: `1px solid ${isActive ? 'var(--accent)' : 'var(--border-subtle)'}`,
+                  color: isActive ? 'var(--accent)' : 'var(--text-secondary)',
+                  opacity: activeDownload && !isActive ? 0.5 : 1,
+                }}
+              >
+                {info.label}
+                {f.size > 0 && (
+                  <span
+                    style={{
+                      opacity: 0.55,
+                      fontFamily: 'var(--font-mono)',
+                      fontSize: '10px',
+                    }}
+                  >
+                    {formatBytes(f.size)}
+                  </span>
+                )}
+              </button>
+            )
+          })}
+          {!showAll && sortedFiles.length > 5 && (
             <button
-              key={f.filename}
-              onClick={() => onDownload(model.id, f.filename)}
-              disabled={!!activeDownload}
-              className="flex items-center btn-press"
-              style={{
-                gap: '4px',
-                height: '24px',
-                padding: '0 8px',
-                borderRadius: '5px',
-                fontSize: '11px',
-                fontFamily: 'var(--font-mono)',
-                fontWeight: 500,
-                color:
-                  isDownloadingFromThis &&
-                  activeDownload?.filename === f.filename
-                    ? 'var(--accent)'
-                    : 'var(--text-secondary)',
-                background:
-                  isDownloadingFromThis &&
-                  activeDownload?.filename === f.filename
-                    ? 'var(--accent-muted)'
-                    : 'var(--bg-elevated)',
-                border: '1px solid var(--border-subtle)',
-                opacity:
-                  activeDownload &&
-                  !(
-                    isDownloadingFromThis &&
-                    activeDownload?.filename === f.filename
-                  )
-                    ? 0.5
-                    : 1,
-              }}
-            >
-              <DocumentDownload size={10} color="currentColor" />
-              {f.quantization ?? 'GGUF'}
-              {f.size > 0 && (
-                <span style={{ opacity: 0.5 }}>{formatBytes(f.size)}</span>
-              )}
-            </button>
-          ))}
-          {!expanded && model.files.length > 6 && (
-            <button
-              onClick={() => setExpanded(true)}
+              onClick={() => setShowAll(true)}
               style={{
                 fontSize: '11px',
                 color: 'var(--accent)',
@@ -1055,12 +1074,12 @@ function SearchModelCard({
                 fontWeight: 500,
               }}
             >
-              +{model.files.length - 6} more
+              +{sortedFiles.length - 5} more
             </button>
           )}
-          {expanded && model.files.length > 6 && (
+          {showAll && sortedFiles.length > 5 && (
             <button
-              onClick={() => setExpanded(false)}
+              onClick={() => setShowAll(false)}
               style={{
                 fontSize: '11px',
                 color: 'var(--text-muted)',
@@ -1069,7 +1088,7 @@ function SearchModelCard({
                 padding: '0 4px',
               }}
             >
-              Show less
+              Less
             </button>
           )}
         </div>
@@ -1078,7 +1097,7 @@ function SearchModelCard({
   )
 }
 
-/* ─── Shared ──────────────────────────────────────── */
+/* ─── Shared ──────────────────────────────────────────── */
 
 function Spinner() {
   return (
@@ -1090,6 +1109,7 @@ function Spinner() {
         border: '2px solid var(--border-default)',
         borderTopColor: 'var(--accent)',
         borderRadius: '50%',
+        flexShrink: 0,
       }}
     />
   )
@@ -1115,160 +1135,103 @@ function DownloadBanner({
   const p = download.progress
   const v = download.verifying
   const isVerifying = v !== null
-
-  const downloadPercent =
-    p && p.total > 0 ? Math.round((p.downloaded / p.total) * 100) : 0
-  const verifyPercent =
-    v && v.total > 0 ? Math.round((v.processed / v.total) * 100) : 0
+  const downloadPercent = p && p.total > 0 ? Math.round((p.downloaded / p.total) * 100) : 0
+  const verifyPercent = v && v.total > 0 ? Math.round((v.processed / v.total) * 100) : 0
   const percent = isVerifying ? verifyPercent : downloadPercent
 
-  const label = isVerifying
-    ? 'Verifying'
-    : download.isPaused
-    ? 'Paused'
-    : 'Downloading'
+  // Extract a friendly label from the filename
+  const fileQuant = download.filename.match(/\.(Q\d[^.]+|IQ\d[^.]+|F16|BF16|F32)\./i)?.[1]
+  const fileLabel = fileQuant ? quantLabel(fileQuant.toUpperCase()).label : null
+  const cleanName = cleanModelName(download.repoId)
 
-  const borderColor = isVerifying
-    ? 'var(--accent)'
-    : download.isPaused
-    ? 'var(--border-default)'
-    : 'var(--accent)'
-
-  const barColor = isVerifying
-    ? 'var(--accent)'
-    : download.isPaused
-    ? 'var(--text-muted)'
-    : 'var(--accent)'
+  const statusLabel = isVerifying ? 'Verifying' : download.isPaused ? 'Paused' : 'Downloading'
+  const barColor = download.isPaused ? 'var(--text-muted)' : 'var(--accent)'
+  const borderColor = download.isPaused ? 'var(--border-default)' : 'var(--accent)'
 
   return (
     <div
       style={{
         margin: '12px 24px 0',
-        padding: '12px 16px',
+        padding: '12px 14px',
         borderRadius: '12px',
         background: 'var(--bg-elevated)',
         border: `1px solid ${borderColor}`,
       }}
     >
-      <div
-        className="flex items-center justify-between"
-        style={{ marginBottom: '8px' }}
-      >
+      <div className="flex items-center" style={{ gap: '10px', marginBottom: '8px' }}>
+        {isVerifying && <Spinner />}
         <div style={{ flex: 1, minWidth: 0 }}>
-          <div
-            className="flex items-center"
-            style={{ gap: '8px', minWidth: 0 }}
+          <p
+            style={{
+              fontSize: '12px',
+              fontWeight: 600,
+              color: 'var(--text-primary)',
+              overflow: 'hidden',
+              textOverflow: 'ellipsis',
+              whiteSpace: 'nowrap',
+            }}
           >
-            {isVerifying && <Spinner />}
-            <p
-              style={{
-                fontSize: '12px',
-                fontWeight: 600,
-                color: 'var(--text-primary)',
-                overflow: 'hidden',
-                textOverflow: 'ellipsis',
-                whiteSpace: 'nowrap',
-              }}
-            >
-              {label} {download.filename}
+            {statusLabel}: {cleanName}
+            {fileLabel && (
+              <span style={{ fontWeight: 400, color: 'var(--text-muted)' }}>
+                {' · '}{fileLabel}
+              </span>
+            )}
+          </p>
+          {!isVerifying && p && (
+            <p style={{ fontSize: '11px', color: 'var(--text-muted)', marginTop: '1px' }}>
+              {formatBytes(p.downloaded)} / {formatBytes(p.total)}
+              {!download.isPaused && <> · {formatSpeed(p.speedBps)}</>}
+              {' · '}{downloadPercent}%
             </p>
-          </div>
-          {isVerifying ? (
-            <p
-              style={{
-                fontSize: '11px',
-                color: 'var(--text-muted)',
-                marginTop: '2px',
-              }}
-            >
-              Checking integrity · {formatBytes(v!.processed)} /{' '}
-              {formatBytes(v!.total)} · {verifyPercent}%
+          )}
+          {isVerifying && v && (
+            <p style={{ fontSize: '11px', color: 'var(--text-muted)', marginTop: '1px' }}>
+              Checking integrity · {verifyPercent}%
             </p>
-          ) : (
-            p && (
-              <p
-                style={{
-                  fontSize: '11px',
-                  color: 'var(--text-muted)',
-                  marginTop: '2px',
-                }}
-              >
-                {formatBytes(p.downloaded)} / {formatBytes(p.total)}
-                {!download.isPaused && (
-                  <> · {formatSpeed(p.speedBps)} · {downloadPercent}%</>
-                )}
-                {download.isPaused && <> · {downloadPercent}%</>}
-              </p>
-            )
           )}
         </div>
-        <div className="flex items-center" style={{ gap: '4px' }}>
+        <div className="flex items-center" style={{ gap: '2px' }}>
           {!isVerifying &&
             (download.isPaused ? (
               <button
                 onClick={onResume}
                 className="flex items-center justify-center btn-press"
-                style={{
-                  width: '28px',
-                  height: '28px',
-                  borderRadius: '6px',
-                  color: 'var(--accent)',
-                }}
-                onMouseEnter={(e) => {
-                  e.currentTarget.style.background = 'var(--bg-overlay)'
-                }}
-                onMouseLeave={(e) => {
-                  e.currentTarget.style.background = 'transparent'
-                }}
+                style={{ width: '28px', height: '28px', borderRadius: '6px', color: 'var(--accent)' }}
+                onMouseEnter={(e) => { e.currentTarget.style.background = 'var(--bg-overlay)' }}
+                onMouseLeave={(e) => { e.currentTarget.style.background = 'transparent' }}
                 aria-label="Resume download"
               >
-                <Play size={16} color="currentColor" variant="Bold" />
+                <Play size={15} color="currentColor" variant="Bold" />
               </button>
             ) : (
               <button
                 onClick={onPause}
                 className="flex items-center justify-center btn-press"
-                style={{
-                  width: '28px',
-                  height: '28px',
-                  borderRadius: '6px',
-                  color: 'var(--text-muted)',
-                }}
-                onMouseEnter={(e) => {
-                  e.currentTarget.style.background = 'var(--bg-overlay)'
-                }}
-                onMouseLeave={(e) => {
-                  e.currentTarget.style.background = 'transparent'
-                }}
+                style={{ width: '28px', height: '28px', borderRadius: '6px', color: 'var(--text-muted)' }}
+                onMouseEnter={(e) => { e.currentTarget.style.background = 'var(--bg-overlay)' }}
+                onMouseLeave={(e) => { e.currentTarget.style.background = 'transparent' }}
                 aria-label="Pause download"
               >
-                <Pause size={16} color="currentColor" variant="Bold" />
+                <Pause size={15} color="currentColor" variant="Bold" />
               </button>
             ))}
           <button
             onClick={onCancel}
             className="flex items-center justify-center btn-press"
-            style={{
-              width: '28px',
-              height: '28px',
-              borderRadius: '6px',
-              color: 'var(--text-muted)',
-            }}
-            onMouseEnter={(e) => {
-              e.currentTarget.style.background = 'var(--bg-overlay)'
-            }}
-            onMouseLeave={(e) => {
-              e.currentTarget.style.background = 'transparent'
-            }}
+            style={{ width: '28px', height: '28px', borderRadius: '6px', color: 'var(--text-muted)' }}
+            onMouseEnter={(e) => { e.currentTarget.style.background = 'var(--bg-overlay)' }}
+            onMouseLeave={(e) => { e.currentTarget.style.background = 'transparent' }}
             aria-label={isVerifying ? 'Cancel verification' : 'Cancel download'}
           >
-            <CloseCircle size={16} color="currentColor" />
+            <CloseCircle size={15} color="currentColor" />
           </button>
         </div>
       </div>
+
       <div
         style={{
-          height: '4px',
+          height: '3px',
           borderRadius: '2px',
           background: 'var(--bg-overlay)',
           overflow: 'hidden',
@@ -1288,7 +1251,7 @@ function DownloadBanner({
   )
 }
 
-/* ─── Downloaded ──────────────────────────────────── */
+/* ─── Downloaded Tab ──────────────────────────────────── */
 
 function DownloadedTab({
   models,
@@ -1301,23 +1264,12 @@ function DownloadedTab({
 
   if (models.length === 0) {
     return (
-      <div className="flex flex-1 flex-col items-center justify-center">
-        <Cpu
-          size={40}
-          color="var(--text-muted)"
-          style={{ opacity: 0.3, marginBottom: '12px' }}
-        />
-        <p style={{ fontSize: '13px', color: 'var(--text-muted)' }}>
-          No downloaded models yet
+      <div className="flex flex-1 flex-col items-center justify-center" style={{ gap: '8px' }}>
+        <Cpu size={36} color="var(--text-muted)" style={{ opacity: 0.2 }} />
+        <p style={{ fontSize: '13px', fontWeight: 500, color: 'var(--text-muted)' }}>
+          No models downloaded yet
         </p>
-        <p
-          style={{
-            fontSize: '12px',
-            color: 'var(--text-muted)',
-            opacity: 0.6,
-            marginTop: '4px',
-          }}
-        >
+        <p style={{ fontSize: '12px', color: 'var(--text-muted)', opacity: 0.6 }}>
           Browse and download a model from the Explore tab
         </p>
       </div>
@@ -1330,32 +1282,20 @@ function DownloadedTab({
         {models.map((model) => {
           const isLoaded = loadedModel?.modelId === model.id
           const author = model.hfRepoId?.split('/')[0] ?? ''
+          const displayName = cleanModelName(model.hfRepoId ?? model.name)
           return (
             <div
               key={model.id}
-              className="flex items-center border btn-press"
+              className="flex items-center border"
               style={{
                 padding: '12px 16px',
                 borderRadius: '12px',
                 gap: '12px',
-                borderColor: isLoaded
-                  ? 'var(--accent)'
-                  : 'var(--border-subtle)',
-                background: isLoaded
-                  ? 'var(--accent-muted)'
-                  : 'var(--bg-surface)',
+                borderColor: isLoaded ? 'var(--accent)' : 'var(--border-subtle)',
+                background: isLoaded ? 'var(--accent-subtle)' : 'var(--bg-surface)',
               }}
             >
-              {author ? (
-                <AuthorAvatar author={author} size={32} />
-              ) : (
-                <Cpu
-                  size={20}
-                  color={
-                    isLoaded ? 'var(--accent)' : 'var(--text-muted)'
-                  }
-                />
-              )}
+              <AuthorAvatar author={author || model.name} size={36} />
               <div style={{ flex: 1, minWidth: 0 }}>
                 <p
                   style={{
@@ -1367,32 +1307,40 @@ function DownloadedTab({
                     whiteSpace: 'nowrap',
                   }}
                 >
-                  {model.name}
+                  {displayName}
                 </p>
-                <p
-                  style={{
-                    fontSize: '11px',
-                    color: 'var(--text-muted)',
-                    marginTop: '2px',
-                  }}
-                >
+                <p style={{ fontSize: '11px', color: 'var(--text-muted)', marginTop: '2px' }}>
                   {formatBytes(model.fileSize)}
-                  {model.hfRepoId && ` · ${model.hfRepoId}`}
+                  {author && <> · {author}</>}
                 </p>
               </div>
               <div className="flex items-center" style={{ gap: '6px' }}>
-                {!isLoaded && (
+                {isLoaded ? (
+                  <span
+                    style={{
+                      padding: '0 12px',
+                      height: '30px',
+                      display: 'flex',
+                      alignItems: 'center',
+                      borderRadius: '7px',
+                      fontSize: '12px',
+                      fontWeight: 500,
+                      color: 'var(--accent)',
+                      background: 'var(--accent-muted)',
+                    }}
+                  >
+                    Active
+                  </span>
+                ) : (
                   <button
-                    onClick={() =>
-                      loadModelFromPath(model.storagePath, model.id)
-                    }
+                    onClick={() => loadModelFromPath(model.storagePath, model.id)}
                     disabled={loading}
                     className="flex items-center btn-press"
                     style={{
-                      gap: '6px',
-                      height: '32px',
+                      gap: '5px',
+                      height: '30px',
                       padding: '0 14px',
-                      borderRadius: '8px',
+                      borderRadius: '7px',
                       fontSize: '12px',
                       fontWeight: 500,
                       background: 'var(--accent)',
@@ -1403,30 +1351,13 @@ function DownloadedTab({
                     {loading ? 'Loading...' : 'Load'}
                   </button>
                 )}
-                {isLoaded && (
-                  <span
-                    style={{
-                      padding: '0 14px',
-                      height: '32px',
-                      display: 'flex',
-                      alignItems: 'center',
-                      borderRadius: '8px',
-                      fontSize: '12px',
-                      fontWeight: 500,
-                      color: 'var(--accent)',
-                      background: 'var(--accent-muted)',
-                    }}
-                  >
-                    Active
-                  </span>
-                )}
                 <button
                   onClick={() => onDelete(model.id)}
                   className="flex items-center justify-center btn-press"
                   style={{
                     width: '30px',
-                    height: '32px',
-                    borderRadius: '8px',
+                    height: '30px',
+                    borderRadius: '7px',
                     color: 'var(--text-muted)',
                   }}
                   onMouseEnter={(e) => {
@@ -1439,7 +1370,7 @@ function DownloadedTab({
                   }}
                   aria-label="Delete model"
                 >
-                  <Trash size={16} color="currentColor" />
+                  <Trash size={15} color="currentColor" />
                 </button>
               </div>
             </div>
@@ -1450,7 +1381,7 @@ function DownloadedTab({
   )
 }
 
-/* ─── Usage Tab ───────────────────────────────────── */
+/* ─── Usage Tab ───────────────────────────────────────── */
 
 const MAX_DATA_POINTS = 60
 
@@ -1495,7 +1426,7 @@ function Sparkline({
     <svg width={width} height={height} style={{ display: 'block' }}>
       <defs>
         <linearGradient id={`grad-${color}`} x1="0" y1="0" x2="0" y2="1">
-          <stop offset="0%" stopColor={color} stopOpacity="0.25" />
+          <stop offset="0%" stopColor={color} stopOpacity="0.22" />
           <stop offset="100%" stopColor={color} stopOpacity="0.02" />
         </linearGradient>
       </defs>
@@ -1544,7 +1475,6 @@ function UsageTab() {
         })
       }
     }
-
     poll()
     intervalRef.current = setInterval(poll, 2000)
     return () => {
@@ -1561,7 +1491,6 @@ function UsageTab() {
   return (
     <div className="flex-1 overflow-y-auto" style={{ padding: '24px' }}>
       <div style={{ maxWidth: '640px', margin: '0 auto' }}>
-        {/* System Header */}
         {hardware && (
           <div
             className="border"
@@ -1573,26 +1502,27 @@ function UsageTab() {
               marginBottom: '16px',
             }}
           >
-            <div className="flex items-center" style={{ gap: '8px', marginBottom: '8px' }}>
-              <MonitorMobbile size={18} color="var(--accent)" />
+            <div
+              className="flex items-center"
+              style={{ gap: '8px', marginBottom: '8px' }}
+            >
+              <MonitorMobbile size={16} color="var(--accent)" />
               <span
-                style={{
-                  fontSize: '13px',
-                  fontWeight: 600,
-                  color: 'var(--text-primary)',
-                }}
+                style={{ fontSize: '13px', fontWeight: 600, color: 'var(--text-primary)' }}
               >
                 System
               </span>
             </div>
             <div
               className="flex flex-wrap"
-              style={{ gap: '16px', fontSize: '12px', color: 'var(--text-muted)' }}
+              style={{ gap: '12px', fontSize: '12px', color: 'var(--text-muted)' }}
             >
               <span>{hardware.cpuName || 'Unknown CPU'}</span>
               <span>{hardware.cpuCores} cores</span>
               <span>{formatBytes(hardware.totalRam)} RAM</span>
-              <span>{hardware.os} {hardware.arch}</span>
+              <span>
+                {hardware.os} {hardware.arch}
+              </span>
               {hardware.metalSupport && (
                 <span style={{ color: 'var(--accent)' }}>Metal</span>
               )}
@@ -1603,7 +1533,6 @@ function UsageTab() {
           </div>
         )}
 
-        {/* Metric Cards */}
         <div
           style={{
             display: 'grid',
@@ -1646,7 +1575,6 @@ function UsageTab() {
           />
         </div>
 
-        {/* Loaded Model */}
         <div
           className="border"
           style={{
@@ -1657,28 +1585,21 @@ function UsageTab() {
           }}
         >
           <div className="flex items-center" style={{ gap: '8px', marginBottom: '12px' }}>
-            <Cpu size={18} color="var(--accent)" />
+            <Cpu size={16} color="var(--accent)" />
             <span
-              style={{
-                fontSize: '13px',
-                fontWeight: 600,
-                color: 'var(--text-primary)',
-              }}
+              style={{ fontSize: '13px', fontWeight: 600, color: 'var(--text-primary)' }}
             >
               Loaded Model
             </span>
           </div>
           {loadedModel ? (
             <div style={{ fontSize: '12px' }}>
-              <div className="flex items-center" style={{ gap: '8px', marginBottom: '6px' }}>
-                <span
-                  style={{
-                    fontWeight: 600,
-                    color: 'var(--text-primary)',
-                    fontFamily: 'var(--font-mono)',
-                  }}
-                >
-                  {loadedModel.modelId}
+              <div
+                className="flex items-center"
+                style={{ gap: '8px', marginBottom: '4px' }}
+              >
+                <span style={{ fontWeight: 600, color: 'var(--text-primary)' }}>
+                  {cleanModelName(loadedModel.modelId)}
                 </span>
                 <span
                   style={{
@@ -1693,13 +1614,10 @@ function UsageTab() {
                   Active
                 </span>
               </div>
-              <div style={{ color: 'var(--text-muted)' }}>
-                <span>
-                  Size: {formatBytes(loadedModel.size)}
-                  {' · '}
-                  Context: {loadedModel.contextLength.toLocaleString()} tok
-                </span>
-              </div>
+              <span style={{ color: 'var(--text-muted)' }}>
+                {formatBytes(loadedModel.size)} · Context:{' '}
+                {loadedModel.contextLength.toLocaleString()} tokens
+              </span>
             </div>
           ) : (
             <p style={{ fontSize: '12px', color: 'var(--text-muted)' }}>
@@ -1715,10 +1633,10 @@ function UsageTab() {
               textAlign: 'center',
               fontSize: '11px',
               color: 'var(--text-muted)',
-              opacity: 0.6,
+              opacity: 0.5,
             }}
           >
-            Collecting data... Graphs update every 2 seconds.
+            Collecting data... Updates every 2 seconds.
           </p>
         )}
       </div>
@@ -1750,7 +1668,10 @@ function MetricCard({
         overflow: 'hidden',
       }}
     >
-      <div className="flex items-center justify-between" style={{ marginBottom: '4px' }}>
+      <div
+        className="flex items-center justify-between"
+        style={{ marginBottom: '4px' }}
+      >
         <span style={{ fontSize: '11px', fontWeight: 500, color: 'var(--text-muted)' }}>
           {label}
         </span>
