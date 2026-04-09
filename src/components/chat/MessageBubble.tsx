@@ -1,6 +1,8 @@
 import { InfoCircle } from 'iconsax-react'
 import type { MessageRole } from '@/lib/types'
 import { MarkdownContent } from './MarkdownContent'
+import { ThinkingBubble, parseThinkContent } from './ThinkingBubble'
+import { CollapsedToolBlock, splitToolCallBlocks } from './CollapsedToolBlock'
 
 interface MessageBubbleProps {
   role: MessageRole
@@ -10,6 +12,7 @@ interface MessageBubbleProps {
 export const MessageBubble = ({ role, content }: MessageBubbleProps) => {
   const isUser = role === 'user'
   const isSystem = role === 'system'
+  const isAgent = !isUser && !isSystem
 
   if (isSystem) {
     return (
@@ -61,6 +64,32 @@ export const MessageBubble = ({ role, content }: MessageBubbleProps) => {
         >
           {content}
         </div>
+      </div>
+    )
+  }
+
+  if (isAgent) {
+    const { thinkingBlocks, rest } = parseThinkContent(content)
+    const segments = splitToolCallBlocks(rest)
+    return (
+      <div className="anim-message-in" style={{ padding: '14px 0' }}>
+        {thinkingBlocks.map((block, i) => (
+          <ThinkingBubble key={i} content={block} isOpen={false} />
+        ))}
+        {segments.map((seg, i) =>
+          seg.type === 'toolcall' ? (
+            <CollapsedToolBlock
+              key={i}
+              success={seg.success}
+              toolName={seg.toolName}
+              argSummary={seg.argSummary}
+              duration={seg.duration}
+              output={seg.output}
+            />
+          ) : (
+            <MarkdownContent key={i} content={seg.text} />
+          )
+        )}
       </div>
     )
   }

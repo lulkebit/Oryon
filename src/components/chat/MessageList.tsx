@@ -4,6 +4,7 @@ import type { ActiveToolCall } from '@/stores/chatStore'
 import { MessageBubble } from './MessageBubble'
 import { MarkdownContent } from './MarkdownContent'
 import { ToolCallBubble } from './ToolCallBubble'
+import { ThinkingBubble, parseThinkContent } from './ThinkingBubble'
 
 interface MessageListProps {
   messages: Message[]
@@ -76,19 +77,36 @@ export const MessageList = ({
             ))}
 
             {streamingContent ? (
-              <div style={{ maxWidth: '95%' }}>
-                <MarkdownContent content={streamingContent} />
-                <span
-                  className="inline-block animate-pulse"
-                  style={{
-                    width: '2px',
-                    height: '14px',
-                    marginLeft: '1px',
-                    verticalAlign: 'text-bottom',
-                    background: 'var(--accent)',
-                  }}
-                />
-              </div>
+              (() => {
+                const { thinkingBlocks, thinkingOpen, rest } = parseThinkContent(streamingContent)
+                return (
+                  <div style={{ maxWidth: '95%' }}>
+                    {thinkingBlocks.map((block, i) => (
+                      <ThinkingBubble
+                        key={i}
+                        content={block}
+                        isOpen={thinkingOpen && i === thinkingBlocks.length - 1}
+                      />
+                    ))}
+                    {rest && (
+                      <>
+                        <MarkdownContent content={rest} />
+                        <span
+                          className="inline-block animate-pulse"
+                          style={{
+                            width: '2px',
+                            height: '14px',
+                            marginLeft: '1px',
+                            verticalAlign: 'text-bottom',
+                            background: 'var(--accent)',
+                          }}
+                        />
+                      </>
+                    )}
+                    {!rest && thinkingOpen && null}
+                  </div>
+                )
+              })()
             ) : activeToolCalls.length === 0 ? (
               <ThinkingIndicator />
             ) : null}
