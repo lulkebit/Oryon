@@ -1,4 +1,4 @@
-import { useState, useRef, useEffect } from 'react'
+import { useState } from 'react'
 import { ArrowRight2, TickCircle, CloseCircle } from 'iconsax-react'
 import {
   DocumentText1,
@@ -32,17 +32,9 @@ interface Props {
 
 export const CollapsedToolBlock = ({ success, toolName, argSummary, duration, output }: Props) => {
   const [expanded, setExpanded] = useState(false)
-  const contentRef = useRef<HTMLDivElement>(null)
-  const [contentHeight, setContentHeight] = useState(0)
 
   const meta = TOOL_META[toolName] ?? { label: toolName, icon: CommandSquare }
   const Icon = meta.icon
-
-  useEffect(() => {
-    if (expanded && contentRef.current) {
-      setContentHeight(Math.min(contentRef.current.scrollHeight, 300))
-    }
-  }, [expanded])
 
   return (
     <div
@@ -111,15 +103,15 @@ export const CollapsedToolBlock = ({ success, toolName, argSummary, duration, ou
 
       <div
         style={{
-          maxHeight: expanded ? contentHeight : 0,
+          display: 'grid',
+          gridTemplateRows: expanded ? '1fr' : '0fr',
           opacity: expanded ? 1 : 0,
-          overflow: 'hidden',
-          transition: 'max-height 200ms var(--ease-out), opacity 150ms var(--ease-out)',
+          transition: `grid-template-rows ${expanded ? '220ms' : '150ms'} var(--ease-out), opacity ${expanded ? '180ms' : '100ms'} var(--ease-out)`,
         }}
       >
+        <div style={{ overflow: 'hidden', minHeight: 0 }}>
         {output && (
           <div
-            ref={contentRef}
             style={{
               borderTop: '1px solid var(--border-subtle)',
               padding: '8px 12px',
@@ -142,6 +134,7 @@ export const CollapsedToolBlock = ({ success, toolName, argSummary, duration, ou
             </pre>
           </div>
         )}
+        </div>
       </div>
     </div>
   )

@@ -111,7 +111,7 @@ export const MessageList = ({
                           <MarkdownContent content={seg.text} />
                           {isLast && (
                             <span
-                              className="inline-block animate-pulse"
+                              className="inline-block anim-cursor-blink"
                               style={{
                                 width: '2px',
                                 height: '14px',
@@ -126,7 +126,7 @@ export const MessageList = ({
                     })}
                     {!hasText && !thinkingOpen && segments.every((s) => s.type === 'toolcall') && (
                       <span
-                        className="inline-block animate-pulse"
+                        className="inline-block anim-cursor-blink"
                         style={{
                           width: '2px',
                           height: '14px',

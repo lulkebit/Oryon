@@ -47,7 +47,7 @@ export const App = () => {
           style={{ background: 'var(--bg-base)' }}
         >
           <ErrorBoundary fallbackTitle="View failed to load">
-            <div key={activeView} className="anim-fade-in flex h-full flex-col">
+            <div key={activeView} className="anim-slide-up flex h-full flex-col">
               {activeView === 'chat' && <ChatView />}
               {activeView === 'models' && <ModelHubView />}
               {activeView === 'settings' && <SettingsView />}

@@ -78,12 +78,13 @@ export const ThinkingBubble = ({ content, isOpen = false }: ThinkingBubbleProps)
 
       <div
         style={{
-          maxHeight: expanded ? '400px' : 0,
+          display: 'grid',
+          gridTemplateRows: expanded ? '1fr' : '0fr',
           opacity: expanded ? 1 : 0,
-          overflow: 'hidden',
-          transition: 'max-height 220ms var(--ease-out), opacity 150ms var(--ease-out)',
+          transition: `grid-template-rows ${expanded ? '240ms' : '160ms'} var(--ease-out), opacity ${expanded ? '200ms' : '100ms'} var(--ease-out)`,
         }}
       >
+        <div style={{ overflow: 'hidden', minHeight: 0 }}>
         <div
           style={{
             borderTop: '1px solid var(--border-subtle)',
@@ -105,6 +106,7 @@ export const ThinkingBubble = ({ content, isOpen = false }: ThinkingBubbleProps)
           >
             {content.trim()}
           </p>
+        </div>
         </div>
       </div>
     </div>

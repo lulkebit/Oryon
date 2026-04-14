@@ -370,7 +370,9 @@ const EmptyState = () => (
     style={{ padding: '40px' }}
   >
     <div className="flex flex-col items-center" style={{ gap: '24px' }}>
-      <MessageText1 size={48} color="var(--text-muted)" variant="Broken" />
+      <div className="anim-float">
+        <MessageText1 size={48} color="var(--text-muted)" variant="Broken" />
+      </div>
       <div className="text-center">
         <h2
           style={{

@@ -225,8 +225,9 @@ export const ChatInput = ({
 
         {isStreaming ? (
           <button
+            key="stop"
             onClick={onStop}
-            className="btn-press flex shrink-0 items-center justify-center"
+            className="btn-press anim-scale-in flex shrink-0 items-center justify-center"
             style={{
               width: '32px',
               height: '32px',
@@ -240,9 +241,10 @@ export const ChatInput = ({
           </button>
         ) : (
           <button
+            key="send"
             onClick={handleSend}
             disabled={!hasContent || disabled}
-            className="btn-press flex shrink-0 items-center justify-center"
+            className="btn-press anim-scale-in flex shrink-0 items-center justify-center"
             style={{
               width: '32px',
               height: '32px',

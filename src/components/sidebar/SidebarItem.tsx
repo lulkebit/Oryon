@@ -51,15 +51,11 @@ export const SidebarItem = ({
         <span className="flex-1 truncate">{label}</span>
         {badge && (
           <div
-            className="shrink-0 rounded-full"
+            className={`shrink-0 rounded-full${badge === 'running' ? ' badge-running' : ''}`}
             style={{
               width: '5px',
               height: '5px',
               background: BADGE_COLORS[badge] ?? 'var(--text-muted)',
-              animation:
-                badge === 'running'
-                  ? 'pulse-badge 2s ease-in-out infinite'
-                  : undefined,
             }}
           />
         )}

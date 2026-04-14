@@ -54,8 +54,8 @@ function formatArgsLabel(name: string, args: Record<string, unknown>): string {
 
 export const ToolCallBubble = ({ toolCall }: ToolCallBubbleProps) => {
   const [expanded, setExpanded] = useState(false)
-  const contentRef = useRef<HTMLDivElement>(null)
-  const [contentHeight, setContentHeight] = useState(0)
+  const [flashKey, setFlashKey] = useState(0)
+  const prevStatusRef = useRef(toolCall.status)
   const meta = TOOL_META[toolCall.toolName] ?? {
     label: toolCall.toolName,
     icon: CommandSquare,
@@ -65,12 +65,11 @@ export const ToolCallBubble = ({ toolCall }: ToolCallBubbleProps) => {
   const argLabel = formatArgsLabel(toolCall.toolName, toolCall.args)
 
   useEffect(() => {
-    if (expanded && contentRef.current) {
-      setContentHeight(
-        Math.min(contentRef.current.scrollHeight, 300)
-      )
+    if (prevStatusRef.current === 'running' && toolCall.status !== 'running') {
+      setFlashKey((k) => k + 1)
     }
-  }, [expanded, toolCall.output])
+    prevStatusRef.current = toolCall.status
+  }, [toolCall.status])
 
   const statusIcon =
     toolCall.status === 'running' ? (
@@ -138,7 +137,13 @@ export const ToolCallBubble = ({ toolCall }: ToolCallBubbleProps) => {
           className="flex items-center"
           style={{ gap: '8px', marginLeft: 'auto', flexShrink: 0 }}
         >
-          {statusIcon}
+          <span
+            key={flashKey}
+            style={{ display: 'flex' }}
+            className={flashKey > 0 ? 'anim-complete-pop' : ''}
+          >
+            {statusIcon}
+          </span>
           {toolCall.durationMs != null && (
             <span
               style={{
@@ -165,16 +170,15 @@ export const ToolCallBubble = ({ toolCall }: ToolCallBubbleProps) => {
       {/* Animated expand/collapse */}
       <div
         style={{
-          maxHeight: expanded ? contentHeight : 0,
+          display: 'grid',
+          gridTemplateRows: expanded ? '1fr' : '0fr',
           opacity: expanded ? 1 : 0,
-          overflow: 'hidden',
-          transition:
-            'max-height 200ms var(--ease-out), opacity 150ms var(--ease-out)',
+          transition: `grid-template-rows ${expanded ? '220ms' : '150ms'} var(--ease-out), opacity ${expanded ? '180ms' : '100ms'} var(--ease-out)`,
         }}
       >
+        <div style={{ overflow: 'hidden', minHeight: 0 }}>
         {toolCall.output && (
           <div
-            ref={contentRef}
             style={{
               borderTop: '1px solid var(--border-subtle)',
               padding: '8px 12px',
@@ -199,6 +203,7 @@ export const ToolCallBubble = ({ toolCall }: ToolCallBubbleProps) => {
             </pre>
           </div>
         )}
+        </div>
       </div>
     </div>
   )
