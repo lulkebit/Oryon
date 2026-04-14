@@ -13,6 +13,7 @@ interface WorkspaceState {
   addWorkspace: () => Promise<void>
   renameWorkspace: (id: string, name: string) => Promise<void>
   removeWorkspace: (id: string) => Promise<void>
+  setWorkspaceIcon: (id: string, icon: string) => Promise<void>
   setActiveWorkspace: (id: string | null) => void
   loadChats: () => Promise<void>
   addChat: (workspaceId: string) => Promise<void>
@@ -90,6 +91,19 @@ export const useWorkspaceStore = create<WorkspaceState>((set, get) => ({
       }))
     } catch (err) {
       console.error('Failed to delete workspace:', err)
+    }
+  },
+
+  setWorkspaceIcon: async (id, icon) => {
+    try {
+      await ipc.setWorkspaceIcon(id, icon)
+      set((s) => ({
+        workspaces: s.workspaces.map((w) =>
+          w.id === id ? { ...w, icon, updatedAt: new Date().toISOString() } : w
+        ),
+      }))
+    } catch (err) {
+      console.error('Failed to set workspace icon:', err)
     }
   },
 

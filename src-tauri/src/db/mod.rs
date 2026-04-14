@@ -88,7 +88,7 @@ impl Database {
 
     pub fn list_workspaces(&self) -> Result<Vec<Workspace>, DbError> {
         let mut stmt = self.conn.prepare(
-            "SELECT id, name, path, created_at, updated_at, last_opened, sort_order
+            "SELECT id, name, path, icon, created_at, updated_at, last_opened, sort_order
              FROM workspaces ORDER BY sort_order, name",
         )?;
         let rows = stmt.query_map([], |row| {
@@ -96,27 +96,34 @@ impl Database {
                 id: row.get(0)?,
                 name: row.get(1)?,
                 path: row.get(2)?,
-                created_at: row.get(3)?,
-                updated_at: row.get(4)?,
-                last_opened: row.get(5)?,
-                sort_order: row.get(6)?,
+                icon: row.get(3)?,
+                created_at: row.get(4)?,
+                updated_at: row.get(5)?,
+                last_opened: row.get(6)?,
+                sort_order: row.get(7)?,
             })
         })?;
         rows.collect::<Result<Vec<_>, _>>().map_err(Into::into)
     }
 
-    pub fn create_workspace(&self, name: &str, path: &str) -> Result<Workspace, DbError> {
+    pub fn create_workspace(
+        &self,
+        name: &str,
+        path: &str,
+        icon: &str,
+    ) -> Result<Workspace, DbError> {
         let id = uuid::Uuid::now_v7().to_string();
         let now = chrono::Utc::now().to_rfc3339();
         self.conn.execute(
-            "INSERT INTO workspaces (id, name, path, created_at, updated_at, last_opened, sort_order)
-             VALUES (?1, ?2, ?3, ?4, ?5, ?6, 0)",
-            rusqlite::params![id, name, path, now, now, now],
+            "INSERT INTO workspaces (id, name, path, icon, created_at, updated_at, last_opened, sort_order)
+             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, 0)",
+            rusqlite::params![id, name, path, icon, now, now, now],
         )?;
         Ok(Workspace {
             id,
             name: name.to_string(),
             path: path.to_string(),
+            icon: icon.to_string(),
             created_at: now.clone(),
             updated_at: now.clone(),
             last_opened: Some(now),
@@ -126,7 +133,7 @@ impl Database {
 
     pub fn get_workspace(&self, id: &str) -> Result<Option<Workspace>, DbError> {
         let mut stmt = self.conn.prepare(
-            "SELECT id, name, path, created_at, updated_at, last_opened, sort_order
+            "SELECT id, name, path, icon, created_at, updated_at, last_opened, sort_order
              FROM workspaces WHERE id = ?1",
         )?;
         let mut rows = stmt.query_map([id], |row| {
@@ -134,10 +141,11 @@ impl Database {
                 id: row.get(0)?,
                 name: row.get(1)?,
                 path: row.get(2)?,
-                created_at: row.get(3)?,
-                updated_at: row.get(4)?,
-                last_opened: row.get(5)?,
-                sort_order: row.get(6)?,
+                icon: row.get(3)?,
+                created_at: row.get(4)?,
+                updated_at: row.get(5)?,
+                last_opened: row.get(6)?,
+                sort_order: row.get(7)?,
             })
         })?;
         match rows.next() {
@@ -152,6 +160,15 @@ impl Database {
         self.conn.execute(
             "UPDATE workspaces SET name = ?1, updated_at = ?2 WHERE id = ?3",
             rusqlite::params![name, now, id],
+        )?;
+        Ok(())
+    }
+
+    pub fn set_workspace_icon(&self, id: &str, icon: &str) -> Result<(), DbError> {
+        let now = chrono::Utc::now().to_rfc3339();
+        self.conn.execute(
+            "UPDATE workspaces SET icon = ?1, updated_at = ?2 WHERE id = ?3",
+            rusqlite::params![icon, now, id],
         )?;
         Ok(())
     }

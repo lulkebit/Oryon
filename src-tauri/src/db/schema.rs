@@ -1,6 +1,10 @@
 pub fn migrations() -> Vec<(i32, &'static str)> {
-    vec![(1, MIGRATION_001)]
+    vec![(1, MIGRATION_001), (2, MIGRATION_002)]
 }
+
+const MIGRATION_002: &str = "
+ALTER TABLE workspaces ADD COLUMN icon TEXT NOT NULL DEFAULT 'folder';
+";
 
 const MIGRATION_001: &str = "
 CREATE TABLE workspaces (

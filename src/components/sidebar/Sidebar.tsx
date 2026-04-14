@@ -9,6 +9,7 @@ import {
   ContextMenu,
   type ContextMenuItem,
 } from '@/components/shared/ContextMenu'
+import { WorkspaceIcon, WorkspaceIconPicker } from './WorkspaceIcon'
 
 const RESIZE_HANDLE_WIDTH = 4
 
@@ -16,6 +17,13 @@ interface ContextMenuState {
   x: number
   y: number
   items: ContextMenuItem[]
+}
+
+interface IconPickerState {
+  workspaceId: string
+  currentIcon: string
+  x: number
+  y: number
 }
 
 export const Sidebar = () => {
@@ -34,6 +42,7 @@ export const Sidebar = () => {
     addChat,
     renameWorkspace,
     removeWorkspace,
+    setWorkspaceIcon,
     renameChat,
     removeChat,
     setActiveChat,
@@ -41,6 +50,7 @@ export const Sidebar = () => {
   const { streamingChatId, errorChatId } = useChatStore()
   const resizing = useRef(false)
   const [contextMenu, setContextMenu] = useState<ContextMenuState | null>(null)
+  const [iconPicker, setIconPicker] = useState<IconPickerState | null>(null)
 
   const getBadge = useCallback(
     (chatId: string): BadgeType => {
@@ -252,22 +262,46 @@ export const Sidebar = () => {
           return (
             <div key={workspace.id} style={{ marginBottom: '12px' }}>
               {!sidebarCollapsed && (
-                <p
-                  className="select-none"
-                  style={{
-                    padding: '12px 12px 6px',
-                    fontSize: '11px',
-                    fontWeight: 500,
-                    textTransform: 'uppercase',
-                    letterSpacing: '0.05em',
-                    color: 'var(--text-muted)',
-                  }}
+                <div
+                  className="flex select-none items-center"
+                  style={{ padding: '12px 12px 6px', gap: '6px' }}
                   onContextMenu={(e) =>
                     handleWorkspaceContext(e, workspace.id, workspace.name)
                   }
                 >
-                  {workspace.name}
-                </p>
+                  <button
+                    aria-label="Change workspace icon"
+                    title="Change icon"
+                    className="btn-press shrink-0 flex items-center justify-center rounded"
+                    style={{ width: 16, height: 16, padding: 0 }}
+                    onClick={(e) => {
+                      e.stopPropagation()
+                      setIconPicker({
+                        workspaceId: workspace.id,
+                        currentIcon: workspace.icon ?? 'folder',
+                        x: e.clientX,
+                        y: e.clientY,
+                      })
+                    }}
+                  >
+                    <WorkspaceIcon
+                      iconId={workspace.icon ?? 'folder'}
+                      size={14}
+                    />
+                  </button>
+                  <p
+                    className="flex-1 truncate"
+                    style={{
+                      fontSize: '11px',
+                      fontWeight: 500,
+                      textTransform: 'uppercase',
+                      letterSpacing: '0.05em',
+                      color: 'var(--text-muted)',
+                    }}
+                  >
+                    {workspace.name}
+                  </p>
+                </div>
               )}
               <div className="flex flex-col" style={{ gap: '2px' }}>
                 {workspaceChats.map((chat) => (
@@ -357,6 +391,17 @@ export const Sidebar = () => {
           y={contextMenu.y}
           items={contextMenu.items}
           onClose={() => setContextMenu(null)}
+        />
+      )}
+
+      {/* Icon picker */}
+      {iconPicker && (
+        <WorkspaceIconPicker
+          currentIcon={iconPicker.currentIcon}
+          x={iconPicker.x}
+          y={iconPicker.y}
+          onSelect={(icon) => setWorkspaceIcon(iconPicker.workspaceId, icon)}
+          onClose={() => setIconPicker(null)}
         />
       )}
     </aside>

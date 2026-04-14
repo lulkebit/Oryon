@@ -11,6 +11,8 @@ export {
   renameWorkspace,
   deleteWorkspace,
   pickWorkspaceFolder,
+  setWorkspaceIcon,
+  detectWorkspaceIcon,
 } from './workspaces'
 export {
   listAllChats,

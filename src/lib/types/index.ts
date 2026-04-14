@@ -2,6 +2,7 @@ export interface Workspace {
   id: string
   name: string
   path: string
+  icon: string
   createdAt: string
   updatedAt: string
   lastOpened: string | null

@@ -63,6 +63,8 @@ pub fn run() {
             commands::create_workspace,
             commands::rename_workspace,
             commands::delete_workspace,
+            commands::set_workspace_icon,
+            commands::detect_workspace_icon,
             commands::list_all_chats,
             commands::create_chat,
             commands::rename_chat,

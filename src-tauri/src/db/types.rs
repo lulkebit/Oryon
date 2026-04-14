@@ -6,6 +6,7 @@ pub struct Workspace {
     pub id: String,
     pub name: String,
     pub path: String,
+    pub icon: String,
     pub created_at: String,
     pub updated_at: String,
     pub last_opened: Option<String>,
