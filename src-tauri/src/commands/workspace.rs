@@ -27,6 +27,9 @@ pub fn detect_icon(path: &str) -> String {
             if pkg.contains("\"vue\":") || pkg.contains("\"@vue/") {
                 return "vue".into();
             }
+            if pkg.contains("\"vite\":") {
+                return "vite".into();
+            }
             if pkg.contains("\"react\":") || pkg.contains("\"react-dom\":") {
                 return "react".into();
             }
