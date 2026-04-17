@@ -29,11 +29,11 @@ export const SidebarItem = ({
     onContextMenu={onContextMenu}
     className="btn-press flex w-full items-center text-left"
     style={{
-      height: '26px',
+      height: '28px',
       gap: '6px',
       padding: '0 8px 0 6px',
       borderRadius: '5px',
-      fontSize: '12.5px',
+      fontSize: '13px',
       color: active ? 'var(--text-primary)' : 'var(--text-secondary)',
       background: active ? 'var(--bg-overlay)' : 'transparent',
     }}
@@ -44,7 +44,14 @@ export const SidebarItem = ({
       if (!active) e.currentTarget.style.background = 'transparent'
     }}
     title={collapsed ? label : undefined}
-    aria-label={label}
+    aria-label={
+      badge === 'running'
+        ? `${label} — generating`
+        : badge === 'error'
+          ? `${label} — error`
+          : label
+    }
+    aria-busy={badge === 'running' || undefined}
   >
     {!collapsed && (
       <>

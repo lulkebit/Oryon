@@ -13,7 +13,28 @@ interface MessageListProps {
   isStreaming?: boolean
   streamingContent?: string
   activeToolCalls?: ActiveToolCall[]
+  onSuggestionSelect?: (prompt: string) => void
+  canSuggest?: boolean
 }
+
+const SUGGESTED_PROMPTS: { label: string; prompt: string }[] = [
+  {
+    label: 'Summarize this project',
+    prompt: 'Summarize the current workspace: what is this project, its architecture, and the most important entry points.',
+  },
+  {
+    label: 'Explain a file',
+    prompt: 'Open the file I name next and explain what it does, its public API, and any non-obvious details.',
+  },
+  {
+    label: 'Find a bug',
+    prompt: 'Walk the codebase looking for likely bugs, logic errors, or unsafe code paths. Report your top 3 findings with file references.',
+  },
+  {
+    label: 'Run a command',
+    prompt: 'Run the project tests and summarize the results. Ask before running anything destructive.',
+  },
+]
 
 export const MessageList = ({
   messages,
@@ -21,6 +42,8 @@ export const MessageList = ({
   isStreaming,
   streamingContent,
   activeToolCalls = [],
+  onSuggestionSelect,
+  canSuggest,
 }: MessageListProps) => {
   const bottomRef = useRef<HTMLDivElement>(null)
 
@@ -52,10 +75,101 @@ export const MessageList = ({
 
   if (messages.length === 0 && !isStreaming) {
     return (
-      <div className="anim-fade-in flex flex-1 items-center justify-center">
-        <p style={{ fontSize: '13px', color: 'var(--text-muted)' }}>
-          Send a message to start the conversation.
-        </p>
+      <div
+        className="anim-fade-in flex flex-1 flex-col items-center justify-center"
+        style={{ padding: '24px', gap: '24px' }}
+      >
+        <div className="text-center" style={{ maxWidth: '420px' }}>
+          <h2
+            style={{
+              fontSize: '15px',
+              fontWeight: 600,
+              color: 'var(--text-primary)',
+              letterSpacing: '-0.01em',
+            }}
+          >
+            Start the conversation
+          </h2>
+          <p
+            style={{
+              marginTop: '6px',
+              fontSize: '12.5px',
+              lineHeight: '18px',
+              color: 'var(--text-muted)',
+            }}
+          >
+            Ask a question, describe a task, or pick a suggestion below.
+          </p>
+        </div>
+
+        {onSuggestionSelect && (
+          <div
+            className="flex flex-wrap items-center justify-center"
+            style={{
+              gap: '8px',
+              maxWidth: '520px',
+              opacity: canSuggest ? 1 : 0.5,
+              pointerEvents: canSuggest ? 'auto' : 'none',
+            }}
+          >
+            {SUGGESTED_PROMPTS.map((s) => (
+              <button
+                key={s.label}
+                type="button"
+                onClick={() => onSuggestionSelect(s.prompt)}
+                className="btn-press"
+                style={{
+                  height: '30px',
+                  padding: '0 12px',
+                  borderRadius: '9999px',
+                  border: '1px solid var(--border-subtle)',
+                  background: 'var(--bg-surface)',
+                  color: 'var(--text-secondary)',
+                  fontSize: '12px',
+                  fontWeight: 500,
+                }}
+                onMouseEnter={(e) => {
+                  e.currentTarget.style.background = 'var(--bg-elevated)'
+                  e.currentTarget.style.color = 'var(--text-primary)'
+                  e.currentTarget.style.borderColor = 'var(--border-default)'
+                }}
+                onMouseLeave={(e) => {
+                  e.currentTarget.style.background = 'var(--bg-surface)'
+                  e.currentTarget.style.color = 'var(--text-secondary)'
+                  e.currentTarget.style.borderColor = 'var(--border-subtle)'
+                }}
+              >
+                {s.label}
+              </button>
+            ))}
+          </div>
+        )}
+
+        <div
+          className="flex items-center"
+          style={{
+            gap: '14px',
+            fontSize: '11px',
+            color: 'var(--text-muted)',
+          }}
+        >
+          <span>
+            <Kbd>Enter</Kbd> to send
+          </span>
+          <span
+            aria-hidden="true"
+            style={{
+              width: '3px',
+              height: '3px',
+              borderRadius: '50%',
+              background: 'var(--text-muted)',
+              opacity: 0.5,
+            }}
+          />
+          <span>
+            <Kbd>Shift</Kbd> + <Kbd>Enter</Kbd> for a new line
+          </span>
+        </div>
       </div>
     )
   }
@@ -150,6 +264,22 @@ export const MessageList = ({
     </div>
   )
 }
+
+const Kbd = ({ children }: { children: React.ReactNode }) => (
+  <kbd
+    style={{
+      fontFamily: 'var(--font-mono)',
+      fontSize: '10.5px',
+      padding: '1px 5px',
+      borderRadius: '4px',
+      border: '1px solid var(--border-subtle)',
+      background: 'var(--bg-elevated)',
+      color: 'var(--text-secondary)',
+    }}
+  >
+    {children}
+  </kbd>
+)
 
 function ThinkingIndicator() {
   return (

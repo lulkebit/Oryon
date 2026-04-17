@@ -9,10 +9,19 @@ import {
   ContextMenu,
   type ContextMenuItem,
 } from '@/components/shared/ContextMenu'
+import { ConfirmDialog, PromptDialog } from '@/components/shared/Dialog'
 import { WorkspaceIcon, WorkspaceIconPicker } from './WorkspaceIcon'
 
-const RESIZE_HANDLE_WIDTH = 4
+const RESIZE_HANDLE_WIDTH = 6
 const CHATS_PREVIEW_COUNT = 5
+
+type RenameTarget =
+  | { kind: 'workspace'; id: string; current: string }
+  | { kind: 'chat'; id: string; current: string }
+
+type ConfirmTarget =
+  | { kind: 'workspace'; id: string; name: string }
+  | { kind: 'chat'; id: string; title: string }
 
 function relativeTime(iso: string): string {
   const diff = Date.now() - new Date(iso).getTime()
@@ -65,6 +74,8 @@ export const Sidebar = () => {
   const resizing = useRef(false)
   const [contextMenu, setContextMenu] = useState<ContextMenuState | null>(null)
   const [iconPicker, setIconPicker] = useState<IconPickerState | null>(null)
+  const [renameTarget, setRenameTarget] = useState<RenameTarget | null>(null)
+  const [confirmTarget, setConfirmTarget] = useState<ConfirmTarget | null>(null)
   const [collapsedWorkspaces, setCollapsedWorkspaces] = useState<Set<string>>(
     new Set()
   )
@@ -160,20 +171,23 @@ export const Sidebar = () => {
           },
           {
             label: 'Rename',
-            onClick: () => {
-              const newName = window.prompt('Rename workspace', name)
-              if (newName?.trim()) renameWorkspace(workspaceId, newName.trim())
-            },
+            onClick: () =>
+              setRenameTarget({
+                kind: 'workspace',
+                id: workspaceId,
+                current: name,
+              }),
           },
           {
             label: 'Remove',
             variant: 'danger',
-            onClick: () => removeWorkspace(workspaceId),
+            onClick: () =>
+              setConfirmTarget({ kind: 'workspace', id: workspaceId, name }),
           },
         ],
       })
     },
-    [addChat, setActiveView, renameWorkspace, removeWorkspace]
+    [addChat, setActiveView]
   )
 
   const handleChatContext = useCallback(
@@ -185,21 +199,40 @@ export const Sidebar = () => {
         items: [
           {
             label: 'Rename',
-            onClick: () => {
-              const newTitle = window.prompt('Rename chat', title)
-              if (newTitle?.trim()) renameChat(chatId, newTitle.trim())
-            },
+            onClick: () =>
+              setRenameTarget({ kind: 'chat', id: chatId, current: title }),
           },
           {
             label: 'Delete',
             variant: 'danger',
-            onClick: () => removeChat(chatId),
+            onClick: () => setConfirmTarget({ kind: 'chat', id: chatId, title }),
           },
         ],
       })
     },
-    [renameChat, removeChat]
+    []
   )
+
+  const handleRenameSubmit = useCallback(
+    (value: string) => {
+      if (!renameTarget) return
+      if (renameTarget.kind === 'workspace') {
+        renameWorkspace(renameTarget.id, value)
+      } else {
+        renameChat(renameTarget.id, value)
+      }
+    },
+    [renameTarget, renameWorkspace, renameChat]
+  )
+
+  const handleConfirmDelete = useCallback(() => {
+    if (!confirmTarget) return
+    if (confirmTarget.kind === 'workspace') {
+      removeWorkspace(confirmTarget.id)
+    } else {
+      removeChat(confirmTarget.id)
+    }
+  }, [confirmTarget, removeWorkspace, removeChat])
 
   return (
     <aside
@@ -380,19 +413,21 @@ export const Sidebar = () => {
                   </span>
                 )}
 
-                {/* Add chat — visible on hover */}
+                {/* Add chat — always visible, brightens on row hover */}
                 {!sidebarCollapsed && (
                   <button
-                    aria-label="New chat"
+                    aria-label={`New chat in ${workspace.name}`}
                     title="New chat"
-                    className="btn-press flex items-center justify-center rounded opacity-0 group-hover:opacity-100"
+                    className="btn-press flex items-center justify-center rounded"
                     style={{
-                      width: 18,
-                      height: 18,
+                      width: 20,
+                      height: 20,
                       color: 'var(--text-muted)',
+                      opacity: 0.7,
                       flexShrink: 0,
-                      transition: 'opacity 120ms ease',
-                      borderRadius: '3px',
+                      transition:
+                        'opacity 120ms ease, background 150ms var(--ease-out), color 150ms var(--ease-out)',
+                      borderRadius: '4px',
                     }}
                     onClick={(e) => {
                       e.stopPropagation()
@@ -402,13 +437,21 @@ export const Sidebar = () => {
                     onMouseEnter={(e) => {
                       e.currentTarget.style.background = 'var(--bg-overlay)'
                       e.currentTarget.style.color = 'var(--text-primary)'
+                      e.currentTarget.style.opacity = '1'
                     }}
                     onMouseLeave={(e) => {
                       e.currentTarget.style.background = 'transparent'
                       e.currentTarget.style.color = 'var(--text-muted)'
+                      e.currentTarget.style.opacity = '0.7'
+                    }}
+                    onFocus={(e) => {
+                      e.currentTarget.style.opacity = '1'
+                    }}
+                    onBlur={(e) => {
+                      e.currentTarget.style.opacity = '0.7'
                     }}
                   >
-                    <Add size={11} color="currentColor" />
+                    <Add size={12} color="currentColor" />
                   </button>
                 )}
               </div>
@@ -578,6 +621,47 @@ export const Sidebar = () => {
           onClose={() => setIconPicker(null)}
         />
       )}
+
+      {/* Rename dialog */}
+      <PromptDialog
+        open={renameTarget !== null}
+        title={
+          renameTarget?.kind === 'workspace'
+            ? 'Rename workspace'
+            : 'Rename chat'
+        }
+        label={renameTarget?.kind === 'workspace' ? 'Workspace name' : 'Chat title'}
+        initialValue={renameTarget?.current ?? ''}
+        submitLabel="Rename"
+        validate={(value) =>
+          value.trim().length === 0 ? 'Name cannot be empty' : null
+        }
+        onSubmit={handleRenameSubmit}
+        onClose={() => setRenameTarget(null)}
+      />
+
+      {/* Destructive confirm */}
+      <ConfirmDialog
+        open={confirmTarget !== null}
+        variant="danger"
+        title={
+          confirmTarget?.kind === 'workspace'
+            ? `Remove "${confirmTarget.name}"?`
+            : confirmTarget
+              ? `Delete "${confirmTarget.title}"?`
+              : ''
+        }
+        description={
+          confirmTarget?.kind === 'workspace'
+            ? 'All chats in this workspace will be removed. This cannot be undone.'
+            : 'The chat and all of its messages will be permanently deleted.'
+        }
+        confirmLabel={
+          confirmTarget?.kind === 'workspace' ? 'Remove workspace' : 'Delete chat'
+        }
+        onConfirm={handleConfirmDelete}
+        onClose={() => setConfirmTarget(null)}
+      />
     </aside>
   )
 }

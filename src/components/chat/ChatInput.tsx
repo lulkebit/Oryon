@@ -1,6 +1,19 @@
-import { useState, useRef, useCallback } from 'react'
+import {
+  useState,
+  useRef,
+  useCallback,
+  forwardRef,
+  useImperativeHandle,
+} from 'react'
 import { Add, Send2, StopCircle, CloseCircle, Document } from 'iconsax-react'
 import { isTauri } from '@/lib/tauri'
+
+export interface ChatInputHandle {
+  /** Replace the composer draft text. */
+  setValue: (value: string) => void
+  /** Focus the textarea. */
+  focus: () => void
+}
 
 interface AttachedFile {
   filename: string
@@ -21,16 +34,30 @@ interface ChatInputProps {
   isStreaming?: boolean
 }
 
-export const ChatInput = ({
-  onSend,
-  onStop,
-  disabled,
-  isStreaming,
-}: ChatInputProps) => {
+export const ChatInput = forwardRef<ChatInputHandle, ChatInputProps>(
+  function ChatInput({ onSend, onStop, disabled, isStreaming }, ref) {
   const [value, setValue] = useState('')
   const [attachments, setAttachments] = useState<AttachedFile[]>([])
   const [attachError, setAttachError] = useState<string | null>(null)
   const textareaRef = useRef<HTMLTextAreaElement>(null)
+
+  useImperativeHandle(
+    ref,
+    () => ({
+      setValue: (next: string) => {
+        setValue(next)
+        // Let the textarea autosize to fit the new content.
+        requestAnimationFrame(() => {
+          const el = textareaRef.current
+          if (!el) return
+          el.style.height = 'auto'
+          el.style.height = Math.min(el.scrollHeight, 200) + 'px'
+        })
+      },
+      focus: () => textareaRef.current?.focus(),
+    }),
+    []
+  )
 
   const handleAttach = useCallback(async () => {
     if (!isTauri) return
@@ -265,4 +292,5 @@ export const ChatInput = ({
       </div>
     </div>
   )
-}
+  }
+)

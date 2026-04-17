@@ -1,14 +1,29 @@
-import { useEffect, useState, useRef, useCallback } from 'react'
-import { MessageText1, DocumentDownload, Cpu, ArrowDown2 } from 'iconsax-react'
+import {
+  useEffect,
+  useState,
+  useRef,
+  useCallback,
+  useId,
+  forwardRef,
+} from 'react'
+import {
+  MessageText1,
+  DocumentDownload,
+  Cpu,
+  ArrowDown2,
+  CloseCircle,
+  Warning2,
+} from 'iconsax-react'
 import { useWorkspaceStore } from '@/stores/workspaceStore'
 import { useChatStore } from '@/stores/chatStore'
 import { useEngineStore } from '@/stores/engineStore'
 import { useModelHubStore } from '@/stores/modelHubStore'
 import { useUiStore } from '@/stores/uiStore'
 import { MessageList } from './MessageList'
-import { ChatInput } from './ChatInput'
+import { ChatInput, type ChatInputHandle } from './ChatInput'
 import { AgentSelector } from './AgentSelector'
 import { ContextIndicator } from './ContextIndicator'
+import { useMenuKeyboard } from '@/components/shared/useMenuKeyboard'
 
 export const ChatView = () => {
   const { activeChatId, chats } = useWorkspaceStore()
@@ -20,9 +35,12 @@ export const ChatView = () => {
     activeToolCalls,
     contextChatId,
     contextUsage,
+    errorChatId,
+    lastError,
     loadMessages,
     sendMessage,
     clearMessages,
+    clearError,
     refreshContextUsage,
   } = useChatStore()
   const {
@@ -36,6 +54,7 @@ export const ChatView = () => {
   const { setActiveView } = useUiStore()
 
   const activeChat = chats.find((c) => c.id === activeChatId)
+  const chatInputRef = useRef<ChatInputHandle>(null)
 
   useEffect(() => {
     loadDownloaded()
@@ -47,7 +66,7 @@ export const ChatView = () => {
     } else {
       clearMessages()
     }
-  // eslint-disable-next-line react-hooks/exhaustive-deps
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [activeChatId])
 
   // When a model is loaded/swapped after the chat is already open, the
@@ -62,13 +81,20 @@ export const ChatView = () => {
   const visibleUsage =
     contextUsage && contextChatId === activeChatId ? contextUsage : null
 
+  const handleSuggestion = useCallback((prompt: string) => {
+    chatInputRef.current?.setValue(prompt)
+    chatInputRef.current?.focus()
+  }, [])
+
   if (!activeChatId || !activeChat) {
     return <EmptyState />
   }
 
+  const showBanner = errorChatId === activeChatId && lastError
+
   return (
     <div className="flex h-full flex-col">
-      {/* Chat header */}
+      {/* Chat header — title is primary; secondary controls sit to the right. */}
       <div
         className="flex items-center justify-between border-b"
         style={{
@@ -77,24 +103,42 @@ export const ChatView = () => {
           borderColor: 'var(--border-subtle)',
         }}
       >
-        <div className="flex items-center" style={{ gap: '8px' }}>
+        <div
+          className="flex min-w-0 items-center"
+          style={{ gap: '10px', flex: 1 }}
+        >
           <h1
+            className="truncate"
             style={{
               fontSize: '14px',
               fontWeight: 600,
               color: 'var(--text-primary)',
+              letterSpacing: '-0.01em',
             }}
+            title={activeChat.title}
           >
             {activeChat.title}
           </h1>
         </div>
 
-        <div className="flex items-center" style={{ gap: '8px' }}>
+        <div
+          className="flex shrink-0 items-center"
+          style={{ gap: '6px' }}
+        >
           <AgentSelector
             chatId={activeChatId}
             onOpenConfig={() => setActiveView('agents')}
           />
           <ContextIndicator usage={visibleUsage} />
+          <div
+            aria-hidden="true"
+            style={{
+              width: '1px',
+              height: '18px',
+              background: 'var(--border-subtle)',
+              margin: '0 2px',
+            }}
+          />
           <ModelSelector
             downloadedModels={downloadedModels}
             loadedModel={loadedModel}
@@ -105,6 +149,64 @@ export const ChatView = () => {
           />
         </div>
       </div>
+
+      {/* Inline error banner — surfaces failures inside the chat surface. */}
+      {showBanner && (
+        <div
+          role="alert"
+          className="anim-slide-up flex items-start"
+          style={{
+            gap: '10px',
+            margin: '12px 24px 0',
+            padding: '10px 12px',
+            borderRadius: '8px',
+            background: 'var(--bg-elevated)',
+            border: '1px solid var(--status-error)',
+            color: 'var(--text-primary)',
+          }}
+        >
+          <Warning2
+            size={16}
+            color="var(--status-error)"
+            style={{ marginTop: '1px', flexShrink: 0 }}
+            variant="Bold"
+          />
+          <div style={{ flex: 1, fontSize: '12.5px', lineHeight: '18px' }}>
+            <div
+              style={{
+                fontWeight: 600,
+                color: 'var(--status-error)',
+                marginBottom: '2px',
+              }}
+            >
+              Message failed
+            </div>
+            <div style={{ color: 'var(--text-secondary)' }}>{lastError}</div>
+          </div>
+          <button
+            type="button"
+            onClick={clearError}
+            aria-label="Dismiss error"
+            className="btn-press flex shrink-0 items-center justify-center"
+            style={{
+              width: '22px',
+              height: '22px',
+              borderRadius: '4px',
+              color: 'var(--text-muted)',
+            }}
+            onMouseEnter={(e) => {
+              e.currentTarget.style.background = 'var(--bg-overlay)'
+              e.currentTarget.style.color = 'var(--text-primary)'
+            }}
+            onMouseLeave={(e) => {
+              e.currentTarget.style.background = 'transparent'
+              e.currentTarget.style.color = 'var(--text-muted)'
+            }}
+          >
+            <CloseCircle size={14} color="currentColor" />
+          </button>
+        </div>
+      )}
 
       {!loadedModel && !modelLoading && (
         <button
@@ -138,9 +240,12 @@ export const ChatView = () => {
         isStreaming={isStreaming}
         streamingContent={streamingContent}
         activeToolCalls={activeToolCalls}
+        onSuggestionSelect={handleSuggestion}
+        canSuggest={!!loadedModel}
       />
 
       <ChatInput
+        ref={chatInputRef}
         onSend={(content) => sendMessage(activeChatId, content)}
         disabled={generating}
         isStreaming={isStreaming}
@@ -150,23 +255,27 @@ export const ChatView = () => {
   )
 }
 
-function ModelSelector({
-  downloadedModels,
-  loadedModel,
-  modelLoading,
-  onSelect,
-  onUnload,
-  onGoToHub,
-}: {
-  downloadedModels: { id: string; name: string; storagePath: string }[]
-  loadedModel: { modelId: string } | null
-  modelLoading: boolean
-  onSelect: (path: string, id: string) => void
-  onUnload: () => void
-  onGoToHub: () => void
-}) {
+// ── ModelSelector ────────────────────────────────────────────────────────────
+
+const ModelSelector = forwardRef<
+  HTMLButtonElement,
+  {
+    downloadedModels: { id: string; name: string; storagePath: string }[]
+    loadedModel: { modelId: string } | null
+    modelLoading: boolean
+    onSelect: (path: string, id: string) => void
+    onUnload: () => void
+    onGoToHub: () => void
+  }
+>(function ModelSelector(
+  { downloadedModels, loadedModel, modelLoading, onSelect, onUnload, onGoToHub },
+  _outerRef
+) {
   const [open, setOpen] = useState(false)
   const ref = useRef<HTMLDivElement>(null)
+  const triggerRef = useRef<HTMLButtonElement>(null)
+  const menuRef = useRef<HTMLDivElement>(null)
+  const menuId = useId()
 
   useEffect(() => {
     if (!open) return
@@ -187,11 +296,26 @@ function ModelSelector({
     [onSelect]
   )
 
+  const close = useCallback(() => setOpen(false), [])
+  const { getTriggerHandlers } = useMenuKeyboard({
+    open,
+    onClose: close,
+    containerRef: menuRef,
+    triggerRef,
+  })
+  const triggerKeyHandlers = getTriggerHandlers(setOpen)
+
   return (
     <div ref={ref} style={{ position: 'relative' }}>
       <button
+        ref={triggerRef}
+        type="button"
         onClick={() => setOpen(!open)}
+        onKeyDown={triggerKeyHandlers.onKeyDown}
         disabled={modelLoading}
+        aria-haspopup="menu"
+        aria-expanded={open}
+        aria-controls={open ? menuId : undefined}
         className="btn-press flex items-center"
         style={{
           height: '28px',
@@ -199,9 +323,8 @@ function ModelSelector({
           padding: '0 10px',
           borderRadius: '6px',
           fontSize: '12px',
-          color: loadedModel
-            ? 'var(--text-secondary)'
-            : 'var(--text-muted)',
+          fontWeight: loadedModel ? 500 : 400,
+          color: loadedModel ? 'var(--text-primary)' : 'var(--text-muted)',
           background: loadedModel
             ? 'var(--accent-muted)'
             : 'var(--bg-elevated)',
@@ -226,6 +349,10 @@ function ModelSelector({
 
       {open && (
         <div
+          ref={menuRef}
+          id={menuId}
+          role="menu"
+          aria-orientation="vertical"
           className="popover-enter border"
           style={{
             position: 'absolute',
@@ -240,11 +367,14 @@ function ModelSelector({
             background: 'var(--bg-elevated)',
             borderColor: 'var(--border-default)',
             boxShadow: 'var(--shadow-lg)',
+            outline: 'none',
             zIndex: 50,
           }}
         >
           {loadedModel && (
             <button
+              type="button"
+              role="menuitem"
               onClick={() => {
                 onUnload()
                 setOpen(false)
@@ -263,6 +393,12 @@ function ModelSelector({
               onMouseLeave={(e) => {
                 e.currentTarget.style.background = 'transparent'
               }}
+              onFocus={(e) => {
+                e.currentTarget.style.background = 'var(--bg-overlay)'
+              }}
+              onBlur={(e) => {
+                e.currentTarget.style.background = 'transparent'
+              }}
             >
               Unload current model
             </button>
@@ -270,6 +406,7 @@ function ModelSelector({
 
           {loadedModel && downloadedModels.length > 0 && (
             <div
+              role="separator"
               style={{
                 height: '1px',
                 margin: '4px 0',
@@ -283,8 +420,11 @@ function ModelSelector({
             return (
               <button
                 key={m.id}
+                type="button"
+                role="menuitem"
                 onClick={() => handleSelect(m.storagePath, m.id)}
                 disabled={isActive}
+                aria-disabled={isActive}
                 className="btn-press flex w-full items-center"
                 style={{
                   height: '32px',
@@ -292,9 +432,7 @@ function ModelSelector({
                   borderRadius: '6px',
                   fontSize: '12px',
                   gap: '8px',
-                  color: isActive
-                    ? 'var(--accent)'
-                    : 'var(--text-primary)',
+                  color: isActive ? 'var(--accent)' : 'var(--text-primary)',
                   fontWeight: isActive ? 500 : 400,
                 }}
                 onMouseEnter={(e) => {
@@ -302,7 +440,16 @@ function ModelSelector({
                     e.currentTarget.style.background = 'var(--bg-overlay)'
                 }}
                 onMouseLeave={(e) => {
-                  e.currentTarget.style.background = 'transparent'
+                  if (!isActive)
+                    e.currentTarget.style.background = 'transparent'
+                }}
+                onFocus={(e) => {
+                  if (!isActive)
+                    e.currentTarget.style.background = 'var(--bg-overlay)'
+                }}
+                onBlur={(e) => {
+                  if (!isActive)
+                    e.currentTarget.style.background = 'transparent'
                 }}
               >
                 <Cpu size={14} color="currentColor" />
@@ -324,6 +471,7 @@ function ModelSelector({
 
           {downloadedModels.length > 0 && (
             <div
+              role="separator"
               style={{
                 height: '1px',
                 margin: '4px 0',
@@ -333,6 +481,8 @@ function ModelSelector({
           )}
 
           <button
+            type="button"
+            role="menuitem"
             onClick={() => {
               onGoToHub()
               setOpen(false)
@@ -352,6 +502,12 @@ function ModelSelector({
             onMouseLeave={(e) => {
               e.currentTarget.style.background = 'transparent'
             }}
+            onFocus={(e) => {
+              e.currentTarget.style.background = 'var(--bg-overlay)'
+            }}
+            onBlur={(e) => {
+              e.currentTarget.style.background = 'transparent'
+            }}
           >
             <DocumentDownload size={14} color="currentColor" />
             {downloadedModels.length === 0
@@ -362,7 +518,9 @@ function ModelSelector({
       )}
     </div>
   )
-}
+})
+
+// ── Empty state (no active chat) ─────────────────────────────────────────────
 
 const EmptyState = () => (
   <div

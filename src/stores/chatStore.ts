@@ -57,6 +57,7 @@ interface ChatState {
   currentChatId: string | null
   streamingChatId: string | null
   errorChatId: string | null
+  lastError: string | null
   isStreaming: boolean
   streamingContent: string
   loading: boolean
@@ -75,6 +76,7 @@ interface ChatState {
   refreshContextUsage: (chatId: string) => Promise<void>
   applyContextEvent: (chatId: string, usage: ContextUsage) => void
   clearMessages: () => void
+  clearError: () => void
   setupListeners: () => Promise<void>
   teardownListeners: () => void
 }
@@ -84,6 +86,7 @@ export const useChatStore = create<ChatState>((set, get) => ({
   currentChatId: null,
   streamingChatId: null,
   errorChatId: null,
+  lastError: null,
   isStreaming: false,
   streamingContent: '',
   loading: false,
@@ -111,7 +114,7 @@ export const useChatStore = create<ChatState>((set, get) => ({
   loadMessages: async (chatId) => {
     get().setCurrentChat(chatId)
     if (get().errorChatId === chatId) {
-      set({ errorChatId: null })
+      set({ errorChatId: null, lastError: null })
     }
     set({ loading: true, messages: [] })
 
@@ -130,6 +133,11 @@ export const useChatStore = create<ChatState>((set, get) => ({
 
   sendMessage: async (chatId, content) => {
     try {
+      // Clear any previous error banner for this chat on a fresh send.
+      if (get().errorChatId === chatId) {
+        set({ errorChatId: null, lastError: null })
+      }
+
       const message = await ipc.createMessage(chatId, 'user', content)
       if (get().currentChatId !== chatId) return
 
@@ -286,6 +294,7 @@ export const useChatStore = create<ChatState>((set, get) => ({
         streamingContent: '',
         streamingChatId: null,
         errorChatId: chatId,
+        lastError: error,
         activeToolCalls: [],
       }))
     } else {
@@ -294,6 +303,7 @@ export const useChatStore = create<ChatState>((set, get) => ({
         streamingContent: '',
         streamingChatId: null,
         errorChatId: chatId,
+        lastError: error,
         activeToolCalls: [],
       })
     }
@@ -334,6 +344,8 @@ export const useChatStore = create<ChatState>((set, get) => ({
       contextChatId: null,
       contextUsage: null,
     }),
+
+  clearError: () => set({ errorChatId: null, lastError: null }),
 
   setupListeners: async () => {
     if (_listenersActive) return

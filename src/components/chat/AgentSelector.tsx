@@ -1,7 +1,8 @@
-import { useEffect, useRef, useState, useCallback } from 'react'
+import { useEffect, useId, useRef, useState, useCallback } from 'react'
 import { People, ArrowDown2, Add, Setting2 } from 'iconsax-react'
 import { useAgentStore } from '@/stores/agentStore'
 import type { Agent } from '@/lib/types'
+import { useMenuKeyboard } from '@/components/shared/useMenuKeyboard'
 
 interface AgentSelectorProps {
   chatId: string
@@ -14,6 +15,9 @@ export const AgentSelector = ({ chatId, onOpenConfig }: AgentSelectorProps) => {
   const [open, setOpen] = useState(false)
   const [activeAgent, setActiveAgent] = useState<Agent | null>(null)
   const ref = useRef<HTMLDivElement>(null)
+  const triggerRef = useRef<HTMLButtonElement>(null)
+  const menuRef = useRef<HTMLDivElement>(null)
+  const menuId = useId()
 
   useEffect(() => {
     loadAgents()
@@ -59,10 +63,25 @@ export const AgentSelector = ({ chatId, onOpenConfig }: AgentSelectorProps) => {
     setOpen(false)
   }, [chatId, createAgent, setChatAgent])
 
+  const close = useCallback(() => setOpen(false), [])
+  const { getTriggerHandlers } = useMenuKeyboard({
+    open,
+    onClose: close,
+    containerRef: menuRef,
+    triggerRef,
+  })
+  const triggerKeyHandlers = getTriggerHandlers(setOpen)
+
   return (
     <div ref={ref} style={{ position: 'relative' }}>
       <button
+        ref={triggerRef}
+        type="button"
+        aria-haspopup="menu"
+        aria-expanded={open}
+        aria-controls={open ? menuId : undefined}
         onClick={() => setOpen(!open)}
+        onKeyDown={triggerKeyHandlers.onKeyDown}
         className="btn-press flex items-center"
         style={{
           height: '28px',
@@ -100,6 +119,10 @@ export const AgentSelector = ({ chatId, onOpenConfig }: AgentSelectorProps) => {
 
       {open && (
         <div
+          ref={menuRef}
+          id={menuId}
+          role="menu"
+          aria-orientation="vertical"
           className="popover-enter border"
           style={{
             position: 'absolute',
@@ -114,6 +137,7 @@ export const AgentSelector = ({ chatId, onOpenConfig }: AgentSelectorProps) => {
             background: 'var(--bg-elevated)',
             borderColor: 'var(--border-default)',
             boxShadow: 'var(--shadow-lg)',
+            outline: 'none',
             zIndex: 50,
           }}
         >
@@ -122,6 +146,8 @@ export const AgentSelector = ({ chatId, onOpenConfig }: AgentSelectorProps) => {
             return (
               <button
                 key={a.id}
+                type="button"
+                role="menuitem"
                 onClick={() => handleSelect(a)}
                 className="btn-press flex w-full items-center"
                 style={{
@@ -140,7 +166,16 @@ export const AgentSelector = ({ chatId, onOpenConfig }: AgentSelectorProps) => {
                     e.currentTarget.style.background = 'var(--bg-overlay)'
                 }}
                 onMouseLeave={(e) => {
-                  e.currentTarget.style.background = 'transparent'
+                  if (!isActive)
+                    e.currentTarget.style.background = 'transparent'
+                }}
+                onFocus={(e) => {
+                  if (!isActive)
+                    e.currentTarget.style.background = 'var(--bg-overlay)'
+                }}
+                onBlur={(e) => {
+                  if (!isActive)
+                    e.currentTarget.style.background = 'transparent'
                 }}
               >
                 <span
@@ -179,6 +214,8 @@ export const AgentSelector = ({ chatId, onOpenConfig }: AgentSelectorProps) => {
           />
 
           <button
+            type="button"
+            role="menuitem"
             onClick={handleCreate}
             className="btn-press flex w-full items-center"
             style={{
@@ -195,12 +232,20 @@ export const AgentSelector = ({ chatId, onOpenConfig }: AgentSelectorProps) => {
             onMouseLeave={(e) => {
               e.currentTarget.style.background = 'transparent'
             }}
+            onFocus={(e) => {
+              e.currentTarget.style.background = 'var(--bg-overlay)'
+            }}
+            onBlur={(e) => {
+              e.currentTarget.style.background = 'transparent'
+            }}
           >
             <Add size={14} color="currentColor" />
             New Agent
           </button>
 
           <button
+            type="button"
+            role="menuitem"
             onClick={() => {
               onOpenConfig()
               setOpen(false)
@@ -218,6 +263,12 @@ export const AgentSelector = ({ chatId, onOpenConfig }: AgentSelectorProps) => {
               e.currentTarget.style.background = 'var(--bg-overlay)'
             }}
             onMouseLeave={(e) => {
+              e.currentTarget.style.background = 'transparent'
+            }}
+            onFocus={(e) => {
+              e.currentTarget.style.background = 'var(--bg-overlay)'
+            }}
+            onBlur={(e) => {
               e.currentTarget.style.background = 'transparent'
             }}
           >
